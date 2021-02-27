@@ -11,19 +11,78 @@
 #include <stdint.h>
 #include <string.h>
 
+/******* DEFINITIONS *******/
+
+enum printf_flag {
+    PRINTF_FLAG_NONE,
+    PRINTF_FLAG_LEFT_JUSTIFY     = (1 << 0),
+    PRINTF_FLAG_INCLUDE_POS_SIGN = (1 << 1),
+    PRINTF_FLAG_INCLUDE_PREFIX   = (1 << 2),
+    PRINTF_FLAG_LEFTPAD_ZEROS    = (1 << 3),
+
+    /*
+     * Flags not derived from specifier-format.
+     */
+
+    PRINTF_FLAG_OCTAL_PREFIX        = (1 << 4),
+    PRINTF_FLAG_HEXDEC_LOWER_PREFIX = (1 << 5),
+    PRINTF_FLAG_HEXDEC_UPPER_PREFIX = (1 << 6),
+    PRINTF_FLAG_INCLUDE_NEG_SIGN    = (1 << 7)
+};
+
+enum printf_length {
+    PRINTF_LENGTH_NONE,
+    PRINTF_LENGTH_SIGNED_CHAR,
+    PRINTF_LENGTH_SHORT_INT,
+    PRINTF_LENGTH_LONG_INT,
+    PRINTF_LENGTH_LONG_LONG_INT,
+    PRINTF_LENGTH_INT_MAX_T,
+    PRINTF_LENGTH_SIZE_T,
+    PRINTF_LENGTH_PTRDIFF_T,
+    PRINTF_LENGTH_LONG_DOUBLE
+};
+
+enum printf_specifier {
+    PRINTF_SPECIFIER_CHAR        = 'c',
+    PRINTF_SPECIFIER_DECIMAL     = 'd',
+    PRINTF_SPECIFIER_INTEGER     = 'i',
+    PRINTF_SPECIFIER_OCTAL       = 'o',
+    PRINTF_SPECIFIER_WRITE_COUNT = 'n',
+    PRINTF_SPECIFIER_POINTER     = 'p',
+    PRINTF_SPECIFIER_STRING      = 's',
+    PRINTF_SPECIFIER_UNSIGNED    = 'u',
+    PRINTF_SPECIFIER_HEX_LOWER   = 'x',
+    PRINTF_SPECIFIER_HEX_UPPER   = 'X',
+
+    PRINTF_SPECIFIER_PERCENT = '%'
+};
+
+struct printf_spec_info {
+    uintptr_t flags;
+
+    int width;
+    int precision;
+
+    enum printf_length length;
+    enum printf_specifier spec;
+};
+
+
 /*
  * All callbacks should return length written-out.
  * should_continue_out will by default store true.
  */
 
 typedef uintptr_t
-(*printf_write_char_callback_t)(void *info,
+(*printf_write_char_callback_t)(const struct printf_spec_info *const spec_info,
+                                void *info,
                                 char ch,
                                 uintptr_t times,
                                 bool *should_continue_out);
 
 typedef uintptr_t
-(*printf_write_string_callback_t)(void *info,
+(*printf_write_string_callback_t)(const struct printf_spec_info *const spec_info,
+                                  void *info,
                                   const char *string,
                                   uintptr_t length,
                                   bool *should_continue_out);

@@ -10,52 +10,6 @@
 
 #include "printf.h"
 
-/******* DEFINITIONS *******/
-
-enum printf_flag {
-    PRINTF_FLAG_NONE,
-    PRINTF_FLAG_LEFT_JUSTIFY     = (1 << 0),
-    PRINTF_FLAG_INCLUDE_POS_SIGN = (1 << 1),
-    PRINTF_FLAG_INCLUDE_PREFIX   = (1 << 2),
-    PRINTF_FLAG_LEFTPAD_ZEROS    = (1 << 3),
-
-    /*
-     * Flags not derived from specifier-format.
-     */
-
-    PRINTF_FLAG_OCTAL_PREFIX        = (1 << 4),
-    PRINTF_FLAG_HEXDEC_LOWER_PREFIX = (1 << 5),
-    PRINTF_FLAG_HEXDEC_UPPER_PREFIX = (1 << 6),
-    PRINTF_FLAG_INCLUDE_NEG_SIGN    = (1 << 7)
-};
-
-enum printf_length {
-    PRINTF_LENGTH_NONE,
-    PRINTF_LENGTH_SIGNED_CHAR,
-    PRINTF_LENGTH_SHORT_INT,
-    PRINTF_LENGTH_LONG_INT,
-    PRINTF_LENGTH_LONG_LONG_INT,
-    PRINTF_LENGTH_INT_MAX_T,
-    PRINTF_LENGTH_SIZE_T,
-    PRINTF_LENGTH_PTRDIFF_T,
-    PRINTF_LENGTH_LONG_DOUBLE
-};
-
-enum printf_specifier {
-    PRINTF_SPECIFIER_CHAR        = 'c',
-    PRINTF_SPECIFIER_DECIMAL     = 'd',
-    PRINTF_SPECIFIER_INTEGER     = 'i',
-    PRINTF_SPECIFIER_OCTAL       = 'o',
-    PRINTF_SPECIFIER_WRITE_COUNT = 'n',
-    PRINTF_SPECIFIER_POINTER     = 'p',
-    PRINTF_SPECIFIER_STRING      = 's',
-    PRINTF_SPECIFIER_UNSIGNED    = 'u',
-    PRINTF_SPECIFIER_HEX_LOWER   = 'x',
-    PRINTF_SPECIFIER_HEX_UPPER   = 'X',
-
-    PRINTF_SPECIFIER_PERCENT = '%'
-};
-
 struct string_view {
     const char *string;
     uint64_t length;
@@ -90,6 +44,9 @@ static inline struct string_view
 sv_create_from_begin_and_end(const char *const begin, const char *const end) {
     return sv_create_from_c_str_and_len(begin, (end - begin));
 }
+
+#define SV_STATIC(string) \
+    sv_create_from_c_str_and_len(string, sizeof(string) - 1)
 
 static inline
 struct string_view sv_create_from_c_str(const char *const string) {
@@ -606,25 +563,27 @@ static inline struct string_view
 _write_signs_for_integer_specifier(struct string_view sv,
                                    bool *const should_continue_in,
                                    uintptr_t *const written_out,
-                                   const uintptr_t flags,
-                                   const char specifier,
+                                   struct printf_spec_info *const spec_info,
                                    const printf_write_char_callback_t char_cb,
-                                   void *const char_cb_info,
-                                   uintptr_t *const flags_out)
+                                   void *const char_cb_info)
 {
-    if (has_mask_value(flags, PRINTF_FLAG_INCLUDE_NEG_SIGN)) {
-        *written_out += char_cb(char_cb_info, '-', 1, should_continue_in);
-        remove_mask_value(flags_out, PRINTF_FLAG_INCLUDE_NEG_SIGN);
+    if (has_mask_value(spec_info->flags, PRINTF_FLAG_INCLUDE_POS_SIGN)) {
+        *written_out +=
+            char_cb(spec_info, char_cb_info, '+', 1, should_continue_in);
 
+        remove_mask_value(&spec_info->flags, PRINTF_FLAG_INCLUDE_POS_SIGN);
         if (!*should_continue_in) {
             return sv;
         }
-    } else if (has_mask_value(flags, PRINTF_FLAG_INCLUDE_POS_SIGN)) {
-        *written_out += char_cb(char_cb_info, '+', 1, should_continue_in);
-        remove_mask_value(flags_out, PRINTF_FLAG_INCLUDE_POS_SIGN);
+    }
 
-        if (!*should_continue_in) {
-            return sv;
+    const char spec = spec_info->spec;
+    if (spec == PRINTF_SPECIFIER_DECIMAL || spec == PRINTF_SPECIFIER_INTEGER) {
+        if (*sv.string == '-') {
+            *written_out +=
+                char_cb(spec_info, char_cb_info, '-', 1, should_continue_in);
+
+            sv.string += 1;
         }
     }
 
@@ -653,251 +612,202 @@ _get_length_accounting_for_flags(struct string_view sv, const uintptr_t flags) {
 }
 
 static inline uintptr_t
-_handle_integer_flags(uintptr_t *const flags_in,
-                      bool *const should_continue_in,
+_handle_integer_flags(struct printf_spec_info *const spec_info,
+                      bool *const should_cont_in,
                       const printf_write_char_callback_t char_cb,
                       void *const char_cb_info,
-                      const printf_write_string_callback_t string_cb,
-                      void *const string_cb_info)
+                      const printf_write_string_callback_t sv_cb,
+                      void *const sv_cb_info)
 {
-    if (has_mask_value(*flags_in, PRINTF_FLAG_OCTAL_PREFIX)) {
-        remove_mask_value(flags_in, PRINTF_FLAG_OCTAL_PREFIX);
-        return char_cb(char_cb_info, '0', 1, should_continue_in);
+    if (has_mask_value(spec_info->flags, PRINTF_FLAG_OCTAL_PREFIX)) {
+        remove_mask_value(&spec_info->flags, PRINTF_FLAG_OCTAL_PREFIX);
+        return char_cb(spec_info, char_cb_info, '0', 1, should_cont_in);
     }
 
-    if (has_mask_value(*flags_in, PRINTF_FLAG_HEXDEC_LOWER_PREFIX)) {
-        remove_mask_value(flags_in, PRINTF_FLAG_HEXDEC_LOWER_PREFIX);
-
-        static const char prefix[] = "0x";
-        const struct string_view sv = sv_create_from_c_str_and_len(prefix, 2);
-        const uintptr_t result =
-            string_cb(string_cb_info, sv.string, sv.length, should_continue_in);
-
-        return result;
+    if (has_mask_value(spec_info->flags, PRINTF_FLAG_HEXDEC_LOWER_PREFIX)) {
+        remove_mask_value(&spec_info->flags, PRINTF_FLAG_HEXDEC_LOWER_PREFIX);
+        return sv_cb(spec_info, sv_cb_info, "0x", 2, should_cont_in);
     }
 
-    if (has_mask_value(*flags_in, PRINTF_FLAG_HEXDEC_UPPER_PREFIX)) {
-        remove_mask_value(flags_in,  PRINTF_FLAG_HEXDEC_UPPER_PREFIX);
-
-        static const char prefix[] = "0X";
-        const struct string_view sv = sv_create_from_c_str_and_len(prefix, 2);
-        const uintptr_t result =
-            string_cb(string_cb_info, sv.string, sv.length, should_continue_in);
-
-        return result;
+    if (has_mask_value(spec_info->flags, PRINTF_FLAG_HEXDEC_UPPER_PREFIX)) {
+        remove_mask_value(&spec_info->flags,  PRINTF_FLAG_HEXDEC_UPPER_PREFIX);
+        return sv_cb(spec_info, sv_cb_info, "0X", 2, should_cont_in);
     }
 
     return 0;
 }
 
 static inline struct string_view
-_handle_printf_width(struct string_view sv,
-                     uintptr_t *const written_out,
-                     bool *const should_continue_in,
-                     uintptr_t *const flags_in,
-                     const int width,
-                     const enum printf_specifier spec,
-                     const printf_write_char_callback_t char_cb,
-                     void *const char_cb_info,
-                     const printf_write_string_callback_t string_cb,
-                     void *const string_cb_info)
+_handle_printf_qualities(
+    struct printf_spec_info *const spec_info,
+    struct string_view sv,
+    uintptr_t *const written_out,
+    bool *const should_cont_in,
+    const printf_write_char_callback_t char_cb,
+    void *const char_cb_info,
+    const printf_write_string_callback_t sv_cb,
+    void *const sv_cb_info)
 {
     /*
-     * width encodes the minimum amount of characters to be printed.
-     *
-     * If the minimum is not met, the difference must be made up with a
-     * padding.
-     *
-     * The padding-char is a space, unless LEFTPAD_ZEROS has been set, in
-     * which case the padding-char is '0'.
+     * We calculate the string-length at the last moment, because the string may
+     * not have a null-terminator.
      */
 
-    /*
-     * For a padding-char of '0', the number -3 should look like "-003",
-     * while a space padding-char would result in "  -3"
-     */
+    if (spec_info->spec == PRINTF_SPECIFIER_STRING) {
+        const char *const begin = sv.string;
 
-    const uintptr_t flags = *flags_in;
-    const uintptr_t length = _get_length_accounting_for_flags(sv, flags);
+        /*
+         * For string specifiers, the precision encodes the *maximum* amount
+         * of characters allowed.
+         */
 
-    if ((uintptr_t)width <= length) {
+        if (spec_info->precision != -1) {
+            const uintptr_t length = strnlen(begin, spec_info->precision);
+            sv = sv_create_from_c_str_and_len(begin, length);
+        } else {
+            sv = sv_create_from_c_str_and_len(begin, strlen(begin));
+        }
+    }
+
+    const int width = spec_info->width;
+    if (width != -1) {
+        /*
+         * width encodes the minimum amount of characters to be printed.
+         *
+         * If the minimum is not met, the difference must be made up with a
+         * padding.
+         *
+         * The padding-char is a space, unless LEFTPAD_ZEROS has been set, in
+         * which case the padding-char is '0'.
+         */
+
+        /*
+         * For a padding-char of '0', the number -3 should look like "-003",
+         * while a space padding-char would result in "  -3"
+         */
+
+        const uintptr_t flags = spec_info->flags;
+        const uintptr_t length = _get_length_accounting_for_flags(sv, flags);
+
+        if ((uintptr_t)width <= length) {
+            return sv;
+        }
+
+        const uintptr_t amt = ((uintptr_t)width - length);
+        if (has_mask_value(flags, PRINTF_FLAG_LEFTPAD_ZEROS)) {
+            /*
+             * Write out the integer-signs first (if we have any) so we can
+             * write leading zeroes first.
+             */
+
+            if (_is_integer_specifier(spec_info->spec)) {
+                sv =
+                    _write_signs_for_integer_specifier(sv,
+                                                       should_cont_in,
+                                                       written_out,
+                                                       spec_info,
+                                                       char_cb,
+                                                       char_cb_info);
+            }
+
+            /*
+             * Integer flags are also added to PRINTF_SPECIFIER_POINTER, so
+             * this function must be called outside _is_integer_specifier()
+             * scope.
+             */
+
+            *written_out +=
+                _handle_integer_flags(spec_info,
+                                      should_cont_in,
+                                      char_cb,
+                                      char_cb_info,
+                                      sv_cb,
+                                      sv_cb_info);
+
+            *written_out +=
+                char_cb(spec_info, char_cb_info, '0', amt, should_cont_in);
+
+            if (!*should_cont_in) {
+                return sv;
+            }
+        } else {
+            *written_out +=
+                char_cb(spec_info, char_cb_info, ' ', amt, should_cont_in);
+
+            if (!*should_cont_in) {
+                return sv;
+            }
+
+            *written_out +=
+                _handle_integer_flags(spec_info,
+                                      should_cont_in,
+                                      char_cb,
+                                      char_cb_info,
+                                      sv_cb,
+                                      sv_cb_info);
+        }
+
         return sv;
     }
 
-    const uintptr_t amt = width - length;
-    if (has_mask_value(flags, PRINTF_FLAG_LEFTPAD_ZEROS)) {
-        /*
-         * Write out the integer-signs first (if we have any) so we can write
-         * leading zeroes first.
-         */
+    const enum printf_specifier spec = spec_info->spec;
+    if (_is_integer_specifier(spec)) {
+        const int precision = spec_info->precision;
+        if (precision != -1) {
+            /*
+             * For integer-specifiers, precision encodes the *minimum* amount of
+             * digits to be printed.
+             *
+             * If minimum is not met, then the string must be padded with
+             * leading zeroes.
+             */
 
-        sv =
-            _write_signs_for_integer_specifier(sv,
-                                                should_continue_in,
-                                                written_out,
-                                                flags,
-                                                spec,
-                                                char_cb,
-                                                char_cb_info,
-                                                flags_in);
+            uintptr_t digit_count = sv.length;
 
-        /*
-         * Integer flags are also added to PRINTF_SPECIFIER_POINTER, so
-         * this function must be called outside _is_integer_specifier() scope.
-         */
+            /*
+             * The number of digits doesn't include the negative sign.
+             */
+
+            if (sv.string[0] == '-') {
+                digit_count -= 1;
+            }
+
+            if (digit_count >= (uintptr_t)precision) {
+                return sv;
+            }
+
+            const uintptr_t amt = ((uintptr_t)precision - digit_count);
+            sv =
+                _write_signs_for_integer_specifier(sv,
+                                                   should_cont_in,
+                                                   written_out,
+                                                   spec_info,
+                                                   char_cb,
+                                                   char_cb_info);
+
+            *written_out +=
+                char_cb(spec_info, char_cb_info, '0', amt, should_cont_in);
+        }
 
         *written_out +=
-            _handle_integer_flags(flags_in,
-                                  should_continue_in,
+            _handle_integer_flags(spec_info,
+                                  should_cont_in,
                                   char_cb,
                                   char_cb_info,
-                                  string_cb,
-                                  string_cb_info);
-
-        *written_out += char_cb(char_cb_info, '0', amt, should_continue_in);
-        if (!*should_continue_in) {
-            return sv;
-        }
-    } else {
-        *written_out += char_cb(char_cb_info, ' ', amt, should_continue_in);
-        if (!*should_continue_in) {
-            return sv;
-        }
-
-        sv =
-            _write_signs_for_integer_specifier(sv,
-                                                should_continue_in,
-                                                written_out,
-                                                flags,
-                                                spec,
-                                                char_cb,
-                                                char_cb_info,
-                                                flags_in);
-
-        *written_out +=
-            _handle_integer_flags(flags_in,
-                                  should_continue_in,
-                                  char_cb,
-                                  char_cb_info,
-                                  string_cb,
-                                  string_cb_info);
+                                  sv_cb,
+                                  sv_cb_info);
     }
 
-    return sv;
-}
-
-static inline struct string_view
-_handle_printf_precision(struct string_view sv,
-                         uintptr_t *const written_out,
-                         bool *const should_continue_in,
-                         uintptr_t *const flags_in,
-                         const int precision,
-                         const enum printf_specifier spec,
-                         const printf_write_char_callback_t char_cb,
-                         void *const char_cb_info)
-{
-    if (spec == PRINTF_SPECIFIER_STRING) {
-        /*
-         * For string specifiers, the precision encodes the *maximum* amount
-         * of characters allowed
-         */
-
-        if (sv.length > (uintptr_t)precision) {
-            sv.length = precision;
-        }
-    } else if (_is_integer_specifier(spec)) {
-        /*
-         * For integer-specifiers, precision encodes the *minimum* amount of
-         * digits to be printed.
-         *
-         * If minimum is not met, then the string must be padded with
-         * leading zeroes.
-         */
-
-        uintptr_t digit_count = sv.length;
-        if (*sv.string == '-') {
-           digit_count -= 1;
-        }
-
-        if (digit_count >= (uintptr_t)precision) {
-            return sv;
-        }
-
-        const uintptr_t amt = precision - digit_count;
-        sv =
-            _write_signs_for_integer_specifier(sv,
-                                               should_continue_in,
-                                               written_out,
-                                               *flags_in,
-                                               spec,
-                                               char_cb,
-                                               char_cb_info,
-                                               flags_in);
-
-        *written_out += char_cb(char_cb_info, '0', amt, should_continue_in);
-        if (!*should_continue_in) {
-            return sv;
-        }
-    }
-
-    return sv;
-}
-
-static inline struct string_view
-_handle_printf_qualities(struct string_view sv,
-                         uintptr_t *const written_out,
-                         bool *const should_continue_in,
-                         uintptr_t flags,
-                         const int width,
-                         const int precision,
-                         const enum printf_specifier spec,
-                         const printf_write_char_callback_t char_cb,
-                         void *const char_cb_info,
-                         const printf_write_string_callback_t sv_cb,
-                         void *const sv_cb_info)
-{
-    if (width != -1) {
-        sv =
-            _handle_printf_width(sv,
-                                 written_out,
-                                 should_continue_in,
-                                 &flags,
-                                 width,
-                                 spec,
-                                 char_cb,
-                                 char_cb_info,
-                                 sv_cb,
-                                 sv_cb_info);
-    }
-
-    if (precision != -1) {
-        sv =
-            _handle_printf_precision(sv,
-                                     written_out,
-                                     should_continue_in,
-                                     &flags,
-                                     precision,
-                                     spec,
-                                     char_cb,
-                                     char_cb_info);
-    }
-
-    *written_out +=
-        _handle_integer_flags(&flags,
-                              should_continue_in,
-                              char_cb,
-                              char_cb_info,
-                              sv_cb,
-                              sv_cb_info);
     return sv;
 }
 
 static inline uintptr_t
-_call_callback(const struct string_view sv,
-               bool *const should_continue_in,
+_call_callback(const struct printf_spec_info *const spec_info,
+               const struct string_view sv,
+               bool *const should_cont_in,
                const printf_write_char_callback_t char_cb,
                void *const char_cb_info,
-               const printf_write_string_callback_t sv_cb,
+               const printf_write_string_callback_t string_cb,
                void *const sv_cb_info)
 {
     if (sv.length == 0) {
@@ -905,13 +815,17 @@ _call_callback(const struct string_view sv,
     }
 
     if (sv.length != 1) {
-        return sv_cb(sv_cb_info, sv.string, sv.length, should_continue_in);
+        const uintptr_t result =
+             string_cb(spec_info,
+                       sv_cb_info,
+                       sv.string,
+                       sv.length,
+                       should_cont_in);
+        return result;
     }
 
-    const uintptr_t result =
-        char_cb(char_cb_info, *sv.string, 1, should_continue_in);
-
-    return result;
+    const char front = sv.string[0];
+    return char_cb(spec_info, char_cb_info, front, 1, should_cont_in);
 }
 
 /******* PUBLIC FUNCTIONS *******/
@@ -951,6 +865,8 @@ parse_printf_format(const printf_write_char_callback_t char_cb,
     uintptr_t written_out = 0;
 
     const char *iter = c_str;
+    struct printf_spec_info spec_info = {};
+
     for (char ch = *iter; ch != '\0'; ch = *(++iter)) {
         if (ch != '%') {
             unformat_buffer_length += 1;
@@ -962,7 +878,8 @@ parse_printf_format(const printf_write_char_callback_t char_cb,
                                          unformat_buffer_length);
 
         written_out +=
-            _call_callback(unformat_buffer_sv,
+            _call_callback(&spec_info,
+                           unformat_buffer_sv,
                            &should_continue,
                            char_cb,
                            char_cb_info,
@@ -984,30 +901,27 @@ parse_printf_format(const printf_write_char_callback_t char_cb,
         /* Skip past the '%' char */
         iter++;
 
-        uintptr_t flags = _parse_printf_flags(iter, &iter);
-        const int width = _parse_printf_width(iter, &list_struct, &iter);
-        const int precision =
+        spec_info.flags = _parse_printf_flags(iter, &iter);
+        spec_info.width = _parse_printf_width(iter, &list_struct, &iter);
+        spec_info.precision =
             _parse_printf_precision(iter, &list_struct, &iter);
 
-        const enum printf_length length = _parse_printf_length(iter, &iter);
-        const enum printf_specifier spec = *iter;
+        spec_info.length = _parse_printf_length(iter, &iter);
+        spec_info.spec = *iter;
 
         struct string_view sv =
             _handle_printf_specifier(conv_buffer,
                                      &list_struct,
-                                     &flags,
+                                     &spec_info.flags,
                                      written_out,
-                                     spec,
-                                     length);
+                                     spec_info.spec,
+                                     spec_info.length);
 
         sv =
-            _handle_printf_qualities(sv,
+            _handle_printf_qualities(&spec_info,
+                                     sv,
                                      &written_out,
                                      &should_continue,
-                                     flags,
-                                     width,
-                                     precision,
-                                     spec,
                                      char_cb,
                                      char_cb_info,
                                      string_cb,
@@ -1024,7 +938,8 @@ parse_printf_format(const printf_write_char_callback_t char_cb,
 
         if (sv.string != NULL) {
             written_out +=
-                _call_callback(sv,
+                _call_callback(&spec_info,
+                               sv,
                                &should_continue,
                                char_cb,
                                char_cb_info,
@@ -1059,7 +974,8 @@ parse_printf_format(const printf_write_char_callback_t char_cb,
                                          unformat_buffer_length);
 
         written_out +=
-            _call_callback(sv,
+            _call_callback(&spec_info,
+                           sv,
                            &should_continue,
                            char_cb,
                            char_cb_info,
@@ -1094,10 +1010,12 @@ format_to_string(char *const buffer_in,
 }
 
 static uintptr_t
-_format_to_string_write_ch_callback(__unused void *const info,
-                                    const char ch,
-                                    uintptr_t amount,
-                                    bool *const should_continue_out)
+_format_to_string_write_ch_callback(
+    __unused const struct printf_spec_info *const spec_info,
+    __unused void *const info,
+    const char ch,
+    uintptr_t amount,
+    bool *const should_continue_out)
 {
     struct callback_info *const cb_info = (struct callback_info *)info;
     const uintptr_t old_used = cb_info->buffer_used;
@@ -1128,10 +1046,12 @@ _format_to_string_write_ch_callback(__unused void *const info,
 }
 
 static uintptr_t
-_format_to_string_write_string_callback(__unused void *const info,
-                                        const char *const string,
-                                        const uintptr_t length,
-                                        bool *const should_continue_out)
+_format_to_string_write_string_callback(
+    __unused const struct printf_spec_info *const spec_info,
+    __unused void *const info,
+    const char *const string,
+    const uintptr_t length,
+    bool *const should_continue_out)
 {
     struct callback_info *const cb_info = (struct callback_info *)info;
     const uintptr_t old_used = cb_info->buffer_used;
@@ -1164,7 +1084,7 @@ _format_to_string_write_string_callback(__unused void *const info,
 }
 
 uintptr_t
-vformat_to_string( char *const buffer_in,
+vformat_to_string(char *const buffer_in,
                   const uintptr_t buffer_len,
                   const char *const format,
                   va_list list)
@@ -1196,19 +1116,23 @@ vformat_to_string( char *const buffer_in,
 }
 
 static uintptr_t
-_get_length_ch_callback(__unused void *const cb_info,
-                        __unused const char ch,
-                        __unused const uintptr_t times,
-                        __unused bool *const should_continue_out)
+_get_length_ch_callback(
+    __unused const struct printf_spec_info *const spec_info,
+    __unused void *const cb_info,
+    __unused const char ch,
+    __unused const uintptr_t times,
+    __unused bool *const should_continue_out)
 {
     return times;
 }
 
 static uintptr_t
-_get_length_string_callback(__unused void *const cb_info,
-                            __unused const char *const string,
-                            const uintptr_t length,
-                            __unused bool *const should_continue_out)
+_get_length_string_callback(
+    __unused const struct printf_spec_info *const spec_info,
+    __unused void *const cb_info,
+    __unused const char *const string,
+    const uintptr_t length,
+    __unused bool *const should_continue_out)
 {
     return length;
 }
