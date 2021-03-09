@@ -45,14 +45,6 @@ sv_create_from_begin_and_end(const char *const begin, const char *const end) {
     return sv_create_from_c_str_and_len(begin, (end - begin));
 }
 
-#define SV_STATIC(string) \
-    sv_create_from_c_str_and_len(string, sizeof(string) - 1)
-
-static inline
-struct string_view sv_create_from_c_str(const char *const string) {
-    return sv_create_from_c_str_and_len(string, strlen(string));
-}
-
 static inline enum printf_flag _get_printf_flag_from_char(const char ch) {
     switch (ch) {
         case '-':
@@ -541,7 +533,7 @@ _handle_printf_specifier(
         case PRINTF_SPECIFIER_STRING: {
             const char *const arg = va_arg(list_struct->list, const char *);
             if (arg != NULL) {
-                sv = sv_create_from_c_str(arg);
+                sv = sv_create_from_c_str_and_len(arg, 0);
             } else {
                 static const char null[] = "(null)";
                 sv = sv_create_from_c_str_and_len(null, 6);
@@ -638,15 +630,14 @@ _handle_integer_flags(struct printf_spec_info *const spec_info,
 }
 
 static inline struct string_view
-_handle_printf_qualities(
-    struct printf_spec_info *const spec_info,
-    struct string_view sv,
-    uintptr_t *const written_out,
-    bool *const should_cont_in,
-    const printf_write_char_callback_t char_cb,
-    void *const char_cb_info,
-    const printf_write_string_callback_t sv_cb,
-    void *const sv_cb_info)
+_handle_printf_qualities(struct printf_spec_info *const spec_info,
+                         struct string_view sv,
+                         uintptr_t *const written_out,
+                         bool *const should_cont_in,
+                         const printf_write_char_callback_t char_cb,
+                         void *const char_cb_info,
+                         const printf_write_string_callback_t sv_cb,
+                         void *const sv_cb_info)
 {
     /*
      * We calculate the string-length at the last moment, because the string may
