@@ -252,9 +252,7 @@ _parse_printf_precision(const char *iter,
 }
 
 static inline enum printf_length
-_parse_printf_length(const char *const iter,
-                     const char **const iter_out)
-{
+_parse_printf_length(const char *const iter, const char **const iter_out) {
     switch (*iter) {
         case 'h': {
             if (iter[1] == 'h') {
@@ -292,12 +290,11 @@ _parse_printf_length(const char *const iter,
 }
 
 static inline struct string_view
-_convert_int_to_string_view(
-    const uint64_t number,
-    char buffer_in[static const LARGEST_BUFFER_LENGTH],
-    const int base,
-    const bool is_signed,
-    const bool is_uppercase)
+_convert_int_to_string_view(const uint64_t number,
+                            char buffer_in[static const LARGEST_BUFFER_LENGTH],
+                            const int base,
+                            const bool is_signed,
+                            const bool is_uppercase)
 {
     struct string_view result = {};
     if (is_signed) {
@@ -356,9 +353,8 @@ _get_signed_integer_with_length(struct va_list_struct *const list_struct,
 }
 
 static inline uint64_t
-_get_unsigned_integer_with_length(
-    struct va_list_struct *const list_struct,
-    const enum printf_length length)
+_get_unsigned_integer_with_length(struct va_list_struct *const list_struct,
+                                  const enum printf_length length)
 {
     uint64_t result = 0;
     switch (length) {
