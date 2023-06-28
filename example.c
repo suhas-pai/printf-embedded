@@ -49,7 +49,7 @@ format_to_buffer_write_ch_callback(
          * in the buffer to copy the whole string.
          */
 
-        amount = (buffer_size - old_used);
+        amount = buffer_size - old_used;
         *should_continue_out = false;
 
         cb_info->buffer_used = old_used + amount;
@@ -89,7 +89,7 @@ format_to_buffer_write_string_callback(
          * in the buffer to copy the whole string.
          */
 
-        amount = (buffer_size - old_used);
+        amount = buffer_size - old_used;
         *should_continue_out = false;
 
         cb_info->buffer_used = old_used + amount;
