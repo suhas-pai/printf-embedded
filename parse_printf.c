@@ -724,11 +724,10 @@ pad_with_lead_zeros(struct printf_spec_info *const info,
 
     const char front = *parsed->begin;
     if (front == '+') {
-        if (info->add_pos_sign) {
-            out += write_char_cb(info, cb_info, '+', /*amount=*/1, cont_out);
-            if (!cont_out) {
-                return out;
-            }
+        // We only have a positive sign when one is requested.
+        out += write_char_cb(info, cb_info, '+', /*amount=*/1, cont_out);
+        if (!cont_out) {
+            return out;
         }
 
         *parsed = sv_drop_front(*parsed);
