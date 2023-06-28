@@ -92,7 +92,7 @@ unsigned_to_string_view(uint64_t number,
         buffer_in[i] = '+';
     }
 
-    if (include_prefix && base != NUMERIC_BASE_10) {
+    if (include_prefix) {
         buffer_in[i - 2] = '0';
         switch (base) {
             case NUMERIC_BASE_2:
