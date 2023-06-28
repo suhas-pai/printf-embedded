@@ -1,11 +1,10 @@
 **/.DS_Store
 
-.cache/
+.cache/*
 .vscode/*
 
-bin/
-obj/
-debug-obj/
+bin/*
+obj/*
+debug-obj/*
 
-!.vscode/launch.json
 compile_commands.json
