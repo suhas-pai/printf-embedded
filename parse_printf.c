@@ -766,16 +766,15 @@ call_cb(const struct printf_spec_info *const spec_info,
 
     if (sv.length != 1) {
         const uintptr_t result =
-             string_cb(spec_info,
-                       sv_cb_info,
-                       sv.begin,
-                       sv.length,
-                       should_cont_in);
+            string_cb(spec_info,
+                      sv_cb_info,
+                      sv.begin,
+                      sv.length,
+                      should_cont_in);
         return result;
     }
 
-    const char front = sv.begin[0];
-    return char_cb(spec_info, char_cb_info, front, 1, should_cont_in);
+    return char_cb(spec_info, char_cb_info, sv.begin[0], 1, should_cont_in);
 }
 
 /******* PUBLIC FUNCTIONS *******/
@@ -887,7 +886,6 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
             case E_HANDLE_SPEC_CONTINUE:
                 continue;
         }
-
 
         /* Move past specifier */
         iter++;

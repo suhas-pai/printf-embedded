@@ -35,8 +35,8 @@ format_to_buffer_write_ch_callback(
 
     struct callback_info *const cb_info = (struct callback_info *)info;
     const uint64_t old_used = cb_info->buffer_used;
-    uint64_t new_used = old_used;
 
+    uint64_t new_used = old_used;
     if (__builtin_add_overflow(new_used, amount, &new_used)) {
         *should_continue_out = false;
         return 0;
