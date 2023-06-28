@@ -364,7 +364,7 @@ parse_length(struct printf_spec_info *const curr_spec,
                     *number_out = number;
                     *is_zero_out = number == 0;
 
-                    curr_spec->length_info = iter;
+                    curr_spec->length_info = iter - 1;
                     iter++;
                     break;
                 }
@@ -375,7 +375,7 @@ parse_length(struct printf_spec_info *const curr_spec,
                     *number_out = number;
                     *is_zero_out = number == 0;
 
-                    curr_spec->length_info = iter;
+                    curr_spec->length_info = iter - 1;
                     break;
                 }
             }
@@ -394,7 +394,7 @@ parse_length(struct printf_spec_info *const curr_spec,
                     *number_out = number;
                     *is_zero_out = number == 0;
 
-                    curr_spec->length_info = iter;
+                    curr_spec->length_info = iter - 1;
                     iter++;
 
                     break;
@@ -406,7 +406,7 @@ parse_length(struct printf_spec_info *const curr_spec,
                     *number_out = number;
                     *is_zero_out = number == 0;
 
-                    curr_spec->length_info = iter;
+                    curr_spec->length_info = iter - 1;
                     break;
                 }
             }
