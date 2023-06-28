@@ -1,117 +1,69 @@
 /*
- * printf.h
- * © suhas pai
- */
+Copyright (c) 2023 Suhas Pai
 
-#ifndef SUHAS_PRINTF_H
-#define SUHAS_PRINTF_H
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
+#pragma once
 
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 
-/******* DEFINITIONS *******/
-
-enum printf_flag {
-    PRINTF_FLAG_NONE,
-    PRINTF_FLAG_LEFT_JUSTIFY     = (1 << 0),
-    PRINTF_FLAG_INCLUDE_POS_SIGN = (1 << 1),
-    PRINTF_FLAG_INCLUDE_PREFIX   = (1 << 2),
-    PRINTF_FLAG_LEFTPAD_ZEROS    = (1 << 3),
-
-    /*
-     * Flags not derived from specifier-format.
-     */
-
-    PRINTF_FLAG_OCTAL_PREFIX        = (1 << 4),
-    PRINTF_FLAG_HEXDEC_LOWER_PREFIX = (1 << 5),
-    PRINTF_FLAG_HEXDEC_UPPER_PREFIX = (1 << 6),
-    PRINTF_FLAG_INCLUDE_NEG_SIGN    = (1 << 7)
-};
-
-enum printf_length {
-    PRINTF_LENGTH_NONE,
-    PRINTF_LENGTH_SIGNED_CHAR,
-    PRINTF_LENGTH_SHORT_INT,
-    PRINTF_LENGTH_LONG_INT,
-    PRINTF_LENGTH_LONG_LONG_INT,
-    PRINTF_LENGTH_INT_MAX_T,
-    PRINTF_LENGTH_SIZE_T,
-    PRINTF_LENGTH_PTRDIFF_T,
-    PRINTF_LENGTH_LONG_DOUBLE
-};
-
-enum printf_specifier {
-    PRINTF_SPECIFIER_CHAR        = 'c',
-    PRINTF_SPECIFIER_DECIMAL     = 'd',
-    PRINTF_SPECIFIER_INTEGER     = 'i',
-    PRINTF_SPECIFIER_OCTAL       = 'o',
-    PRINTF_SPECIFIER_WRITE_COUNT = 'n',
-    PRINTF_SPECIFIER_POINTER     = 'p',
-    PRINTF_SPECIFIER_STRING      = 's',
-    PRINTF_SPECIFIER_UNSIGNED    = 'u',
-    PRINTF_SPECIFIER_HEX_LOWER   = 'x',
-    PRINTF_SPECIFIER_HEX_UPPER   = 'X',
-
-    PRINTF_SPECIFIER_PERCENT = '%'
-};
-
 struct printf_spec_info {
-    uintptr_t flags;
+    bool add_one_space_for_sign : 1;
+    bool left_justify : 1;
+    bool add_pos_sign : 1;
+    bool add_base_prefix : 1;
+    bool leftpad_zeros : 1;
 
-    int width;
+    uint32_t width;
     int precision;
 
-    enum printf_length length;
-    enum printf_specifier spec;
+    const char *length_info;
+    char spec;
 };
-
 
 /*
  * All callbacks should return length written-out.
- * should_continue_out will by default store true.
+ * should_continue_out is initialized to true.
  */
 
-typedef uintptr_t
+typedef uint64_t
 (*printf_write_char_callback_t)(const struct printf_spec_info *const spec_info,
                                 void *info,
                                 char ch,
-                                uintptr_t times,
+                                uint64_t times,
                                 bool *should_continue_out);
 
-typedef uintptr_t
+typedef uint64_t
 (*printf_write_string_callback_t)(const struct printf_spec_info *const spec_info,
                                   void *info,
                                   const char *string,
-                                  uintptr_t length,
+                                  uint64_t length,
                                   bool *should_continue_out);
 
-uintptr_t
+uint64_t
 parse_printf_format(printf_write_char_callback_t char_cb,
                     void *char_cb_info,
                     printf_write_string_callback_t string_cb,
                     void *string_cb_info,
                     const char *c_str,
                     va_list list);
-
-
-uintptr_t
-format_to_string(char *buffer_in,
-                 uintptr_t buffer_len,
-                 const char *format,
-                 ...) __attribute__((format(printf, 3, 4)));;
-
-uintptr_t
-vformat_to_string(char *buffer_in,
-                  uintptr_t buffer_len,
-                  const char *format,
-                  va_list list);
-
-uintptr_t
-get_length_of_printf_format(const char *fmt, ...)
-    __attribute__((format(printf, 1, 2)));;
-
-uintptr_t get_length_of_printf_vformat(const char *fmt, va_list list);
-
-#endif /* SUHAS_PRINTF_H */

@@ -11,7 +11,7 @@
 #include "printf.h"
 
 struct string_view {
-    const char *string;
+    const char *begin;
     uint64_t length;
 };
 
@@ -24,16 +24,12 @@ struct va_list_struct {
 #define HEXADECIMAL_BUFFER_LENGTH 20
 #define LARGEST_BUFFER_LENGTH OCTAL_BUFFER_LENGTH
 
-#define add_mask_value(store, mask) ((*(store)) |= (mask))
-#define has_mask_value(x, mask) (((x) & (mask)) != 0)
-#define remove_mask_value(store, mask) ((*(store)) &= (~(mask)))
-
 /******* PRIVATE FUNCTIONS *******/
 
-static inline struct string_view
-sv_create_from_c_str_and_len(const char *string, const uint64_t length) {
+static inline
+struct string_view sv_create_length(const char *string, const uint64_t length) {
     const struct string_view sv = {
-        .string = string,
+        .begin = string,
         .length = length
     };
 
@@ -41,68 +37,42 @@ sv_create_from_c_str_and_len(const char *string, const uint64_t length) {
 }
 
 static inline struct string_view
-sv_create_from_begin_and_end(const char *const begin, const char *const end) {
-    return sv_create_from_c_str_and_len(begin, (end - begin));
+sv_create_end(const char *const begin, const char *const end) {
+    return sv_create_length(begin, (uint64_t)(end - begin));
 }
 
-static inline enum printf_flag _get_printf_flag_from_char(const char ch) {
-    switch (ch) {
-        case '-':
-            return PRINTF_FLAG_LEFT_JUSTIFY;
-        case '+':
-            return PRINTF_FLAG_INCLUDE_POS_SIGN;
-        case '#':
-            return PRINTF_FLAG_INCLUDE_PREFIX;
-        case '0':
-            return PRINTF_FLAG_LEFTPAD_ZEROS;
-    }
+#define SV_STATIC(c_str) sv_create_length(c_str, sizeof(c_str) - 1)
 
-    return PRINTF_FLAG_NONE;
+static inline struct string_view sv_create_empty() {
+    return (struct string_view){ .begin = NULL, .length = 0 };
 }
 
-static inline
-uintptr_t _parse_printf_flags(const char *iter, const char **const iter_out) {
-    uintptr_t result = 0;
-
-    {
-        enum printf_flag flag = PRINTF_FLAG_NONE;
-        char ch = *iter;
-
-        do {
-            flag = _get_printf_flag_from_char(ch);
-            if (flag == PRINTF_FLAG_NONE) {
-                break;
-            }
-
-            add_mask_value(&result, flag);
-            ch = *(++iter);
-        } while (true);
+static struct string_view sv_drop_front(const struct string_view sv) {
+    if (sv.length != 0) {
+        return sv_create_length(sv.begin + 1, sv.length - 1);
     }
 
-    if (result != 0) {
-        *iter_out = iter;
-    }
-
-    return result;
-}
-
-static inline
-bool _ch_is_within_range(const char ch, const char front, const char back) {
-    return ((uint8_t)(ch - front) <= (back - front));
+    return sv_create_empty();
 }
 
 static const char *const lower_alphadigit_string = "0123456789abcdef";
 static const char *const upper_alphadigit_string = "0123456789ABCDEF";
 
+enum numeric_base {
+    NUMERIC_BASE_2 = 2,
+    NUMERIC_BASE_8 = 8,
+    NUMERIC_BASE_10 = 10,
+    NUMERIC_BASE_16 = 16,
+};
+
 static inline struct string_view
-_unsigned_to_string_view(uint64_t number,
-                         const int base,
-                         char buffer_in[static const LARGEST_BUFFER_LENGTH],
-                         const bool uppercase)
+unsigned_to_string_view(uint64_t number,
+                        const enum numeric_base base,
+                        char buffer_in[static const LARGEST_BUFFER_LENGTH],
+                        const bool uppercase,
+                        const bool include_prefix)
 {
-    /*
-     * Subtract one from the buffer-size to convert ordinal to index.
-     */
+    // Subtract one from the buffer-size to convert ordinal to index.
 
     int i = (LARGEST_BUFFER_LENGTH - 1);
     const char *const alphadigit_string =
@@ -121,20 +91,38 @@ _unsigned_to_string_view(uint64_t number,
         number /= base;
     } while (true);
 
+    if (include_prefix) {
+        buffer_in[i - 2] = '0';
+        switch (base) {
+            case NUMERIC_BASE_2:
+                buffer_in[i - 1] = 'b';
+                break;
+            case NUMERIC_BASE_8:
+                buffer_in[i - 1] = 'o';
+                break;
+            case NUMERIC_BASE_10:
+                break;
+            case NUMERIC_BASE_16:
+                buffer_in[i - 1] = 'x';
+                break;
+        }
+
+        i -= 2;
+    }
+
     /* Make end point to the null-terminator */
     const char *const end = buffer_in + (LARGEST_BUFFER_LENGTH - 1);
-    return sv_create_from_begin_and_end(buffer_in + i, end);
+    return sv_create_end(buffer_in + i, end);
 }
 
 static struct string_view
-_convert_neg_64int_to_string(int64_t number,
-                             const int base,
-                             char buffer_in[static const LARGEST_BUFFER_LENGTH],
-                             const bool uppercase)
+convert_neg_64int_to_string(int64_t number,
+                            const enum numeric_base base,
+                            char buffer_in[static const LARGEST_BUFFER_LENGTH],
+                            const bool uppercase,
+                            const bool include_prefix)
 {
-    /*
-     * Subtract one from the buffer-size to convert ordinal to index.
-     */
+    // Subtract one from the buffer-size to convert ordinal to index.
 
     int i = (LARGEST_BUFFER_LENGTH - 1);
     const char *const alphadigit_string =
@@ -153,33 +141,97 @@ _convert_neg_64int_to_string(int64_t number,
         number /= base;
     } while (true);
 
+    if (include_prefix) {
+        buffer_in[i - 2] = '0';
+        switch (base) {
+            case NUMERIC_BASE_2:
+                buffer_in[i - 1] = 'b';
+                break;
+            case NUMERIC_BASE_8:
+                buffer_in[i - 1] = 'o';
+                break;
+            case NUMERIC_BASE_10:
+                break;
+            case NUMERIC_BASE_16:
+                buffer_in[i - 1] = 'x';
+                break;
+        }
+
+        i -= 2;
+    }
+
     /* Make end point to the null-terminator */
     const char *const end = buffer_in + (LARGEST_BUFFER_LENGTH - 1);
-    return sv_create_from_begin_and_end(buffer_in + i, end);
+    return sv_create_end(buffer_in + i, end);
 }
 
 static inline struct string_view
-_signed_to_string_view(const int64_t number,
-                       const int base,
-                       char buffer_in[static const LARGEST_BUFFER_LENGTH],
-                       const bool uppercase)
+signed_to_string_view(const int64_t number,
+                      const enum numeric_base base,
+                      char buffer_in[static const LARGEST_BUFFER_LENGTH],
+                      const bool uppercase,
+                      const bool include_prefix)
 {
     struct string_view result = {};
     if (number > 0) {
         result =
-            _unsigned_to_string_view(number, base, buffer_in, uppercase);
+            unsigned_to_string_view(number,
+                                    base,
+                                    buffer_in,
+                                    uppercase,
+                                    include_prefix);
     } else {
         result =
-            _convert_neg_64int_to_string(number, base, buffer_in, uppercase);
+            convert_neg_64int_to_string(number,
+                                        base,
+                                        buffer_in,
+                                        uppercase,
+                                        include_prefix);
     }
 
     return result;
 }
 
-static inline int
-_read_int_from_printf_c_str(const char *const c_str,
-                            const char **const iter_out)
+static bool
+parse_flags(struct printf_spec_info *const curr_spec,
+            const char *iter,
+            const char **const iter_out)
 {
+    do {
+        switch (*iter) {
+            case ' ':
+                curr_spec->add_one_space_for_sign = true;
+                goto check_iter;
+            case '-':
+                curr_spec->left_justify = 1;
+                goto check_iter;
+            case '+':
+                curr_spec->add_pos_sign = true;
+                goto check_iter;
+            case '#':
+                curr_spec->add_base_prefix = true;
+                goto check_iter;
+            case '0':
+                curr_spec->leftpad_zeros = true;
+                goto check_iter;
+            check_iter:
+                iter++;
+                if (*iter == '\0') {
+                    return false;
+                }
+
+                continue;
+        }
+
+        break;
+    } while (true);
+
+    *iter_out = iter;
+    return true;
+}
+
+static inline int
+read_int_from_fmt_string(const char *const c_str, const char **const iter_out) {
     int result = 0;
     const char *iter = c_str;
 
@@ -204,598 +256,494 @@ _read_int_from_printf_c_str(const char *const c_str,
     return result;
 }
 
-static inline
-int _read_positive_int_from_va_list(struct va_list_struct *const list_struct) {
-    const int result = va_arg(list_struct->list, int);
-    if (result > 0) {
-        return result;
+static bool
+parse_width(struct printf_spec_info *const curr_spec,
+            struct va_list_struct *const list_struct,
+            const char *iter,
+            const char **const iter_out)
+{
+    if (*iter != '*') {
+        const int width = read_int_from_fmt_string(iter, &iter);
+        if (width == -1) {
+            return false;
+        }
+
+        curr_spec->width = (uint32_t)width;
+    } else {
+        const int value = va_arg(list_struct->list, int);
+        curr_spec->width = value >= 0 ? (uint32_t)value : 0;
+
+        iter++;
     }
 
-    return -1;
+    if (*iter == '\0') {
+        // If we have an incomplete spec, then we exit without writing
+        // anything.
+
+        return false;
+    }
+
+    *iter_out = iter;
+    return true;
 }
 
-static inline int
-_parse_printf_width(const char *const iter,
-                    struct va_list_struct *const list_struct,
-                    const char **const iter_out)
+static bool
+parse_precision(struct printf_spec_info *const curr_spec,
+                const char *iter,
+                struct va_list_struct *const list_struct,
+                const char **const iter_out)
 {
-    const char front = *iter;
-    if (front == '*') {
-        *iter_out = iter + 1;
-        return _read_positive_int_from_va_list(list_struct);
-    }
-
-    if (!_ch_is_within_range(front, '0', '9')) {
-        return -1;
-    }
-
-    return _read_int_from_printf_c_str(iter, iter_out);
-}
-
-static inline int
-_parse_printf_precision(const char *iter,
-                        struct va_list_struct *const list_struct,
-                        const char **const iter_out)
-{
+    curr_spec->precision = -1;
     if (*iter != '.') {
-        return -1;
+        goto done;
     }
 
     iter++;
-    if (*iter == '*') {
-        *iter_out = iter + 1;
-        return _read_positive_int_from_va_list(list_struct);
-    }
-
-    /* Add one to skip the '.' */
-    return _read_int_from_printf_c_str(iter, iter_out);
-}
-
-static inline enum printf_length
-_parse_printf_length(const char *const iter, const char **const iter_out) {
     switch (*iter) {
+        case '\0':
+            return false;
+        case '*':
+            // Don't bother reading if we have an incomplete spec
+            if (iter[1] == '\0') {
+                return false;
+            }
+
+            curr_spec->precision = va_arg(list_struct->list, int);
+            iter++;
+
+            break;
+        default: {
+            curr_spec->precision = read_int_from_fmt_string(iter, &iter);
+            if (curr_spec->precision == -1) {
+                return false;
+            }
+
+            if (*iter == '\0') {
+                return false;
+            }
+
+            break;
+        }
+    }
+
+done:
+    *iter_out = iter;
+    return true;
+}
+
+static bool
+parse_length(struct printf_spec_info *const curr_spec,
+             const char *iter,
+             const char **const iter_out,
+             struct va_list_struct *const list_struct,
+             uint64_t *const number_out,
+             bool *const is_zero_out)
+{
+    switch (*iter) {
+        case '\0':
+            // If we incomplete spec, then we exit without writing anything.
+            return false;
         case 'h': {
-            if (iter[1] == 'h') {
-                *iter_out = iter + 2;
-                return PRINTF_LENGTH_SIGNED_CHAR;
+            iter++;
+            switch (*iter) {
+                case '\0':
+                    // If we incomplete spec, then we exit without writing
+                    // anything.
+                    return false;
+                case 'h': {
+                    const uint64_t number =
+                        (uint64_t)(signed char)va_arg(list_struct->list, int);
+
+                    *number_out = number;
+                    *is_zero_out = number == 0;
+
+                    curr_spec->length_info = iter;
+                    iter++;
+                    break;
+                }
+                default: {
+                    const uint64_t number =
+                        (uint64_t)(short int)va_arg(list_struct->list, int);
+
+                    *number_out = number;
+                    *is_zero_out = number == 0;
+
+                    curr_spec->length_info = iter;
+                    break;
+                }
             }
 
-            *iter_out = iter + 1;
-            return PRINTF_LENGTH_SHORT_INT;
+            break;
         }
-        case 'l': {
-            if (iter[1] == 'l') {
-                *iter_out = iter + 2;
-                return PRINTF_LENGTH_LONG_LONG_INT;
+        case 'l':
+            iter++;
+            switch (*iter) {
+                case '\0':
+                    return false;
+                case 'l': {
+                    const uint64_t number =
+                        (uint64_t)va_arg(list_struct->list, long long int);
+
+                    *number_out = number;
+                    *is_zero_out = number == 0;
+
+                    curr_spec->length_info = iter;
+                    iter++;
+
+                    break;
+                }
+                default: {
+                    const uint64_t number =
+                        (uint64_t)va_arg(list_struct->list, long int);
+
+                    *number_out = number;
+                    *is_zero_out = number == 0;
+
+                    curr_spec->length_info = iter;
+                    break;
+                }
             }
 
-            *iter_out = iter + 1;
-            return PRINTF_LENGTH_LONG_INT;
+            break;
+        case 'j': {
+            const uint64_t number =
+                (uint64_t)va_arg(list_struct->list, intmax_t);
+
+            *number_out = number;
+            *is_zero_out = number == 0;
+
+            curr_spec->length_info = iter;
+            iter++;
+
+            break;
         }
-        case 'j':
-            *iter_out = iter + 1;
-            return PRINTF_LENGTH_INT_MAX_T;
-        case 'z':
-            *iter_out = iter + 1;
-            return PRINTF_LENGTH_SIZE_T;
-        case 't':
-            *iter_out = iter + 1;
-            return PRINTF_LENGTH_PTRDIFF_T;
-        case 'L':
-            *iter_out = iter + 1;
-            return PRINTF_LENGTH_LONG_DOUBLE;
-    }
+        case 'z': {
+            const uint64_t number = (uint64_t)va_arg(list_struct->list, size_t);
 
-    return PRINTF_LENGTH_NONE;
-}
+            *number_out = number;
+            *is_zero_out = number == 0;
 
-static inline struct string_view
-_convert_int_to_string_view(const uint64_t number,
-                            char buffer_in[static const LARGEST_BUFFER_LENGTH],
-                            const int base,
-                            const bool is_signed,
-                            const bool is_uppercase)
-{
-    struct string_view result = {};
-    if (is_signed) {
-        result =
-            _signed_to_string_view((int64_t)number,
-                                   /*base=*/base,
-                                   /*buffer_in=*/buffer_in,
-                                   /*uppercase=*/is_uppercase);
-    } else {
-        result =
-            _unsigned_to_string_view(number,
-                                     /*base=*/base,
-                                     /*buffer_in=*/buffer_in,
-                                     /*uppercase=*/is_uppercase);
-    }
+            curr_spec->length_info = iter;
+            iter++;
 
-    return result;
-}
+            break;
+        }
+        case 't': {
+            const uint64_t number =
+                (uint64_t)va_arg(list_struct->list, ptrdiff_t);
 
-static inline int64_t
-_get_signed_integer_with_length(struct va_list_struct *const list_struct,
-                                const enum printf_length length)
-{
-    int64_t result = 0;
-    switch (length) {
-        case PRINTF_LENGTH_NONE:
-            result = va_arg(list_struct->list, int);
+            *number_out = number;
+            *is_zero_out = number == 0;
+
+            curr_spec->length_info = iter;
+            iter++;
+
             break;
-        case PRINTF_LENGTH_SIGNED_CHAR:
-            result = (signed char)va_arg(list_struct->list, int);
-            break;
-        case PRINTF_LENGTH_SHORT_INT:
-            result = (short int)va_arg(list_struct->list, int);
-            break;
-        case PRINTF_LENGTH_LONG_INT:
-            result = va_arg(list_struct->list, long int);
-            break;
-        case PRINTF_LENGTH_LONG_LONG_INT:
-            result = va_arg(list_struct->list, long long int);
-            break;
-        case PRINTF_LENGTH_INT_MAX_T:
-            result = va_arg(list_struct->list, intmax_t);
-            break;
-        case PRINTF_LENGTH_SIZE_T:
-            result = va_arg(list_struct->list, size_t);
-            break;
-        case PRINTF_LENGTH_PTRDIFF_T:
-            result = va_arg(list_struct->list, ptrdiff_t);
-            break;
-        case PRINTF_LENGTH_LONG_DOUBLE:
-            /* TODO: Should something be done here? */
+        }
+        default:
+            curr_spec->length_info = NULL;
             break;
     }
 
-    return result;
+    *iter_out = iter;
+    return true;
 }
 
-static inline uint64_t
-_get_unsigned_integer_with_length(struct va_list_struct *const list_struct,
-                                  const enum printf_length length)
+enum handle_spec_result {
+    E_HANDLE_SPEC_OK,
+    E_HANDLE_SPEC_REACHED_END,
+    E_HANDLE_SPEC_CONTINUE
+};
+
+static enum handle_spec_result
+handle_spec(struct printf_spec_info *const curr_spec,
+            const char *const iter,
+            char *const buffer,
+            uint64_t number,
+            struct va_list_struct *const list_struct,
+            const uint64_t written_out,
+            const char **const unformatted_start_out,
+            struct string_view *const parsed_out,
+            bool *const is_zero_out,
+            bool *const is_null_out)
 {
-    uint64_t result = 0;
-    switch (length) {
-        case PRINTF_LENGTH_NONE:
-            result = va_arg(list_struct->list, unsigned int);
+    switch (curr_spec->spec) {
+        case '\0':
+            return E_HANDLE_SPEC_REACHED_END;
+        case 'd':
+        case 'i':
+            if (curr_spec->length_info == NULL) {
+                number = (uint64_t)va_arg(list_struct->list, int);
+                *is_zero_out = number == 0;
+            }
+
+            *parsed_out =
+                signed_to_string_view((int64_t)number,
+                                      NUMERIC_BASE_10,
+                                      buffer,
+                                      /*uppercase=*/false,
+                                      /*include_prefix=*/false);
             break;
-        case PRINTF_LENGTH_SIGNED_CHAR:
-            result = (unsigned char)va_arg(list_struct->list, unsigned int);
+        case 'u':
+            if (curr_spec->length_info == NULL) {
+                number = va_arg(list_struct->list, unsigned);
+                *is_zero_out = number == 0;
+            }
+
+            *parsed_out =
+                unsigned_to_string_view(number,
+                                        NUMERIC_BASE_10,
+                                        buffer,
+                                        /*uppercase=*/false,
+                                        /*include_prefix=*/false);
             break;
-        case PRINTF_LENGTH_SHORT_INT:
-            result =
-                (unsigned short int)va_arg(list_struct->list, unsigned int);
+        case 'o':
+            if (curr_spec->length_info == NULL) {
+                number = va_arg(list_struct->list, unsigned);
+                *is_zero_out = (number == 0);
+            }
+
+            *parsed_out =
+                unsigned_to_string_view(number,
+                                        NUMERIC_BASE_8,
+                                        buffer,
+                                        /*uppercase=*/false,
+                                        /*include_prefix=*/false);
             break;
-        case PRINTF_LENGTH_LONG_INT:
-            result = va_arg(list_struct->list, unsigned long int);
+        case 'x':
+            if (curr_spec->length_info == NULL) {
+                number = va_arg(list_struct->list, unsigned);
+                *is_zero_out = number == 0;
+            }
+
+            *parsed_out =
+                unsigned_to_string_view(number,
+                                        NUMERIC_BASE_16,
+                                        buffer,
+                                        /*uppercase=*/false,
+                                        /*include_prefix=*/false);
             break;
-        case PRINTF_LENGTH_LONG_LONG_INT:
-            result = va_arg(list_struct->list, unsigned long long int);
+        case 'X': {
+            if (curr_spec->length_info == NULL) {
+                number = va_arg(list_struct->list, unsigned);
+                *is_zero_out = number == 0;
+            }
+
+            *parsed_out =
+                unsigned_to_string_view(number,
+                                        NUMERIC_BASE_16,
+                                        buffer,
+                                        /*uppercase=*/true,
+                                        /*include_prefix=*/false);
             break;
-        case PRINTF_LENGTH_INT_MAX_T:
-            result = va_arg(list_struct->list, uintmax_t);
+        }
+        case 'c':
+            buffer[0] = (char)va_arg(list_struct->list, int);
+            *parsed_out = sv_create_length(buffer, 1);
+
             break;
-        case PRINTF_LENGTH_SIZE_T:
-            result = va_arg(list_struct->list, size_t);
+        case 's': {
+            const char *const str = va_arg(list_struct->list, const char *);
+            if (str != NULL) {
+                uint64_t length = 0;
+                if (curr_spec->precision != -1) {
+                    length = strnlen(str, (size_t)curr_spec->precision);
+                } else {
+                    length = strlen(str);
+                }
+
+                *parsed_out = sv_create_length(str, length);
+            } else {
+                *parsed_out = SV_STATIC("(null)");
+                *is_null_out = true;
+            }
+
             break;
-        case PRINTF_LENGTH_PTRDIFF_T:
-            result = va_arg(list_struct->list, ptrdiff_t);
+        }
+        case 'p': {
+            const void *const arg = va_arg(list_struct->list, const void *);
+            if (arg != NULL) {
+                *parsed_out =
+                    unsigned_to_string_view((uint64_t)arg,
+                                            /*base=*/16,
+                                            buffer,
+                                            /*uppercase=*/true,
+                                            /*include_prefix=*/true);
+            } else {
+                *parsed_out = SV_STATIC("(nil)");
+                *is_null_out = true;
+            }
+
             break;
-        case PRINTF_LENGTH_LONG_DOUBLE:
-            /* TODO: Should something be done here? */
+        }
+        case 'n':
+            if (curr_spec->length_info == NULL) {
+                *va_arg(list_struct->list, int *) = written_out;
+                return E_HANDLE_SPEC_CONTINUE;
+            }
+
+            switch (*curr_spec->length_info) {
+                case 'h':
+                    // case 'hh'
+                    if (curr_spec->length_info[1] == 'h') {
+                        *va_arg(list_struct->list, signed char *) =
+                            written_out;
+                        return E_HANDLE_SPEC_CONTINUE;
+                    } else {
+                        *va_arg(list_struct->list, short int *) = written_out;
+                        return E_HANDLE_SPEC_CONTINUE;
+                    }
+
+                    break;
+                case 'l':
+                    // case 'll'
+                    if (curr_spec->length_info[1] == 'h') {
+                        *va_arg(list_struct->list, signed char *) =
+                            written_out;
+
+                        return E_HANDLE_SPEC_CONTINUE;
+                    } else {
+                        *va_arg(list_struct->list, long int *) =
+                            (long int)written_out;
+
+                        return E_HANDLE_SPEC_CONTINUE;
+                    }
+
+                    break;
+                case 'j':
+                    *va_arg(list_struct->list, intmax_t *) =
+                        (intmax_t)written_out;
+                    return E_HANDLE_SPEC_CONTINUE;
+                case 'z':
+                    *va_arg(list_struct->list, size_t *) = written_out;
+                    return E_HANDLE_SPEC_CONTINUE;
+                case 't':
+                    *va_arg(list_struct->list, ptrdiff_t *) =
+                        (ptrdiff_t)written_out;
+                    return E_HANDLE_SPEC_CONTINUE;
+            }
+
+            break;
+        case '%':
+            buffer[0] = '%';
+            *parsed_out = sv_create_length(buffer, 1);
+
             break;
         default:
-            result = va_arg(list_struct->list, unsigned int);
+            if (curr_spec->spec >= '0' && curr_spec->spec <= '9') {
+                *unformatted_start_out = iter + 1;
+                return E_HANDLE_SPEC_CONTINUE;
+            }
+
             break;
     }
 
-    return result;
+    return E_HANDLE_SPEC_OK;
 }
 
-static inline bool _is_integer_specifier(const enum printf_specifier spec) {
+static inline bool is_int_specifier(const char spec) {
     switch (spec) {
-        case PRINTF_SPECIFIER_DECIMAL:
-        case PRINTF_SPECIFIER_INTEGER:
-        case PRINTF_SPECIFIER_OCTAL:
-        case PRINTF_SPECIFIER_UNSIGNED:
-        case PRINTF_SPECIFIER_HEX_LOWER:
-        case PRINTF_SPECIFIER_HEX_UPPER:
+        case 'd':
+        case 'i':
+        case 'o':
+        case 'u':
+        case 'x':
+        case 'X':
             return true;
-        case PRINTF_SPECIFIER_CHAR:
-        case PRINTF_SPECIFIER_PERCENT:
-        case PRINTF_SPECIFIER_POINTER:
-        case PRINTF_SPECIFIER_STRING:
-        case PRINTF_SPECIFIER_WRITE_COUNT:
-            break;
     }
 
     return false;
 }
 
-static inline struct string_view
-_handle_printf_specifier(
-    char buffer_in[static const OCTAL_BUFFER_LENGTH],
-    struct va_list_struct *const list_struct,
-    uintptr_t *const flags_in,
-    const uintptr_t written_out,
-    const enum printf_specifier specifier,
-    const enum printf_length length)
+static inline uint64_t
+write_prefix_for_spec(struct printf_spec_info *const info,
+                      const printf_write_char_callback_t write_ch_cb,
+                      void *const ch_cb_info,
+                      const printf_write_string_callback_t write_sv_cb,
+                      void *const sv_cb_info,
+                      bool *const cont_out)
 {
-    struct string_view sv = {};
-    bool is_uppercase = false;
-    const uintptr_t flags = *flags_in;
+    uint64_t out = 0;
+    if (!info->add_base_prefix) {
+        return out;
+    }
 
-    switch (specifier) {
-        case PRINTF_SPECIFIER_DECIMAL:
-        case PRINTF_SPECIFIER_INTEGER: {
-            const int64_t arg =
-                _get_signed_integer_with_length(list_struct, length);
-
-            sv =
-                _convert_int_to_string_view(/*number=*/(uint64_t)arg,
-                                            /*buffer_in=*/buffer_in,
-                                            /*base=*/10,
-                                            /*is_signed=*/true,
-                                            /*is_uppercase=*/is_uppercase);
-            if (arg < 0) {
-                add_mask_value(flags_in, PRINTF_FLAG_INCLUDE_NEG_SIGN);
-            }
-
+    switch (info->spec) {
+        case 'o':
+            out += write_ch_cb(info, ch_cb_info, '0', /*times=*/1, cont_out);
             break;
-        }
-        case PRINTF_SPECIFIER_UNSIGNED: {
-            const uint64_t arg =
-                _get_unsigned_integer_with_length(list_struct, length);
-            sv =
-                _convert_int_to_string_view(/*number=*/arg,
-                                            /*buffer_in=*/buffer_in,
-                                            /*base=*/10,
-                                            /*is_signed=*/false,
-                                            /*is_uppercase=*/is_uppercase);
-
+        case 'x':
+            out += write_sv_cb(info, sv_cb_info, "0x", /*length=*/2, cont_out);
             break;
-        }
-        case PRINTF_SPECIFIER_OCTAL: {
-            const uint64_t arg =
-                _get_unsigned_integer_with_length(list_struct, length);
-            sv =
-                _convert_int_to_string_view(/*number=*/arg,
-                                            /*buffer_in=*/buffer_in,
-                                            /*base=*/8,
-                                            /*is_signed=*/false,
-                                            /*is_uppercase=*/is_uppercase);
-
-            if (has_mask_value(flags, PRINTF_FLAG_INCLUDE_PREFIX)) {
-                add_mask_value(flags_in, PRINTF_FLAG_OCTAL_PREFIX);
-            }
-
-            break;
-        }
-        case PRINTF_SPECIFIER_HEX_UPPER:
-            is_uppercase = true;
-            /* fallthrough */
-        case PRINTF_SPECIFIER_HEX_LOWER: {
-            const uint64_t arg =
-                _get_unsigned_integer_with_length(list_struct, length);
-            sv =
-                _convert_int_to_string_view(/*number=*/arg,
-                                            /*buffer_in=*/buffer_in,
-                                            /*base=*/16,
-                                            /*is_signed=*/false,
-                                            /*is_uppercase=*/is_uppercase);
-
-            if (has_mask_value(flags, PRINTF_FLAG_INCLUDE_PREFIX)) {
-                const enum printf_flag mask =
-                    (is_uppercase) ?
-                        PRINTF_FLAG_HEXDEC_UPPER_PREFIX :
-                        PRINTF_FLAG_HEXDEC_LOWER_PREFIX;
-
-                add_mask_value(flags_in, mask);
-            }
-
-            break;
-        }
-        case PRINTF_SPECIFIER_CHAR:
-            buffer_in[0] = (char)va_arg(list_struct->list, int);
-            sv = sv_create_from_c_str_and_len(buffer_in, 1);
-
-            break;
-        case PRINTF_SPECIFIER_PERCENT:
-            buffer_in[0] = '%';
-            sv = sv_create_from_c_str_and_len(buffer_in, 1);
-
-            break;
-        case PRINTF_SPECIFIER_POINTER: {
-            const uintptr_t arg = (uintptr_t)va_arg(list_struct->list, void *);
-            if (arg != 0) {
-                sv =
-                    _convert_int_to_string_view(
-                        /*number=*/arg,
-                        /*buffer_in=*/buffer_in,
-                        /*base=*/16,
-                        /*is_signed=*/false,
-                        /*is_uppercase=*/is_uppercase);
-
-                add_mask_value(flags_in, PRINTF_FLAG_HEXDEC_LOWER_PREFIX);
-            } else {
-                static const char nil[] = "(nil)";
-                sv = sv_create_from_c_str_and_len(nil, 5);
-            }
-
-            break;
-        }
-        case PRINTF_SPECIFIER_STRING: {
-            const char *const arg = va_arg(list_struct->list, const char *);
-            if (arg != NULL) {
-                sv = sv_create_from_c_str_and_len(arg, 0);
-            } else {
-                static const char null[] = "(null)";
-                sv = sv_create_from_c_str_and_len(null, 6);
-            }
-
-            break;
-        }
-        case PRINTF_SPECIFIER_WRITE_COUNT:
-            *va_arg(list_struct->list, int *) = written_out;
-            sv = sv_create_from_c_str_and_len(buffer_in, 0);
-
+        case 'X':
+            out += write_sv_cb(info, sv_cb_info, "0X", /*length=*/2, cont_out);
             break;
     }
 
-    return sv;
+    return out;
 }
 
-static inline struct string_view
-_write_signs_for_integer_specifier(struct string_view sv,
-                                   bool *const should_continue_in,
-                                   uintptr_t *const written_out,
-                                   struct printf_spec_info *const spec_info,
-                                   const printf_write_char_callback_t char_cb,
-                                   void *const char_cb_info)
+static uint64_t
+pad_with_lead_zeros(struct printf_spec_info *const info,
+                    struct string_view *const parsed,
+                    const uint64_t zero_count,
+                    const bool is_null,
+                    const printf_write_char_callback_t write_char_cb,
+                    void *const cb_info,
+                    const printf_write_string_callback_t write_sv_cb,
+                    void *const write_sv_cb_info,
+                    bool *const cont_out)
 {
-    if (has_mask_value(spec_info->flags, PRINTF_FLAG_INCLUDE_POS_SIGN)) {
-        *written_out +=
-            char_cb(spec_info, char_cb_info, '+', 1, should_continue_in);
-
-        remove_mask_value(&spec_info->flags, PRINTF_FLAG_INCLUDE_POS_SIGN);
-        if (!*should_continue_in) {
-            return sv;
-        }
+    uint64_t out = 0;
+    if (!is_null) {
+        out +=
+            write_prefix_for_spec(info,
+                                  write_char_cb,
+                                  cb_info,
+                                  write_sv_cb,
+                                  write_sv_cb_info,
+                                  cont_out);
     }
 
-    const char spec = spec_info->spec;
-    if (spec == PRINTF_SPECIFIER_DECIMAL || spec == PRINTF_SPECIFIER_INTEGER) {
-        if (*sv.string == '-') {
-            *written_out +=
-                char_cb(spec_info, char_cb_info, '-', 1, should_continue_in);
-
-            sv.string += 1;
-        }
+    if (zero_count == 0) {
+        return out;
     }
 
-    return sv;
+    const char front = *parsed->begin;
+    if (front == '+') {
+        if (info->add_pos_sign) {
+            out += write_char_cb(info, cb_info, '+', /*amount=*/1, cont_out);
+            if (!cont_out) {
+                return out;
+            }
+        }
+
+        *parsed = sv_drop_front(*parsed);
+    } else if (front == '-') {
+        out += write_char_cb(info, cb_info, '-', /*amount=*/1, cont_out);
+        if (!cont_out) {
+            return out;
+        }
+
+        *parsed = sv_drop_front(*parsed);
+    }
+
+    out += write_char_cb(info, cb_info, '0', zero_count, cont_out);
+    if (!cont_out) {
+        return out;
+    }
+
+    return out;
 }
 
 static inline uintptr_t
-_get_length_accounting_for_flags(struct string_view sv, const uintptr_t flags) {
-    if (has_mask_value(flags, PRINTF_FLAG_INCLUDE_NEG_SIGN)) {
-        sv.length += 1;
-    } else if (has_mask_value(flags, PRINTF_FLAG_INCLUDE_POS_SIGN)) {
-        sv.length += 1;
-    }
-
-    if (has_mask_value(flags, PRINTF_FLAG_OCTAL_PREFIX)) {
-        return (sv.length + 1);
-    } else {
-        if (has_mask_value(flags, PRINTF_FLAG_HEXDEC_LOWER_PREFIX) ||
-            has_mask_value(flags, PRINTF_FLAG_HEXDEC_UPPER_PREFIX))
-        {
-            return (sv.length + 2);
-        }
-    }
-
-    return sv.length;
-}
-
-static inline uintptr_t
-_handle_integer_flags(struct printf_spec_info *const spec_info,
-                      bool *const should_cont_in,
-                      const printf_write_char_callback_t char_cb,
-                      void *const char_cb_info,
-                      const printf_write_string_callback_t sv_cb,
-                      void *const sv_cb_info)
-{
-    if (has_mask_value(spec_info->flags, PRINTF_FLAG_OCTAL_PREFIX)) {
-        remove_mask_value(&spec_info->flags, PRINTF_FLAG_OCTAL_PREFIX);
-        return char_cb(spec_info, char_cb_info, '0', 1, should_cont_in);
-    }
-
-    if (has_mask_value(spec_info->flags, PRINTF_FLAG_HEXDEC_LOWER_PREFIX)) {
-        remove_mask_value(&spec_info->flags, PRINTF_FLAG_HEXDEC_LOWER_PREFIX);
-        return sv_cb(spec_info, sv_cb_info, "0x", 2, should_cont_in);
-    }
-
-    if (has_mask_value(spec_info->flags, PRINTF_FLAG_HEXDEC_UPPER_PREFIX)) {
-        remove_mask_value(&spec_info->flags,  PRINTF_FLAG_HEXDEC_UPPER_PREFIX);
-        return sv_cb(spec_info, sv_cb_info, "0X", 2, should_cont_in);
-    }
-
-    return 0;
-}
-
-static inline struct string_view
-_handle_printf_qualities(struct printf_spec_info *const spec_info,
-                         struct string_view sv,
-                         uintptr_t *const written_out,
-                         bool *const should_cont_in,
-                         const printf_write_char_callback_t char_cb,
-                         void *const char_cb_info,
-                         const printf_write_string_callback_t sv_cb,
-                         void *const sv_cb_info)
-{
-    /*
-     * We calculate the string-length at the last moment, because the string may
-     * not have a null-terminator.
-     */
-
-    if (spec_info->spec == PRINTF_SPECIFIER_STRING) {
-        const char *const begin = sv.string;
-
-        /*
-         * For string specifiers, the precision encodes the *maximum* amount
-         * of characters allowed.
-         */
-
-        if (spec_info->precision != -1) {
-            const uintptr_t length = strnlen(begin, spec_info->precision);
-            sv = sv_create_from_c_str_and_len(begin, length);
-        } else {
-            sv = sv_create_from_c_str_and_len(begin, strlen(begin));
-        }
-    }
-
-    const int width = spec_info->width;
-    if (width != -1) {
-        /*
-         * width encodes the minimum amount of characters to be printed.
-         *
-         * If the minimum is not met, the difference must be made up with a
-         * padding.
-         *
-         * The padding-char is a space, unless LEFTPAD_ZEROS has been set, in
-         * which case the padding-char is '0'.
-         */
-
-        /*
-         * For a padding-char of '0', the number -3 should look like "-003",
-         * while a space padding-char would result in "  -3"
-         */
-
-        const uintptr_t flags = spec_info->flags;
-        const uintptr_t length = _get_length_accounting_for_flags(sv, flags);
-
-        if ((uintptr_t)width <= length) {
-            return sv;
-        }
-
-        const uintptr_t amt = ((uintptr_t)width - length);
-        if (has_mask_value(flags, PRINTF_FLAG_LEFTPAD_ZEROS)) {
-            /*
-             * Write out the integer-signs first (if we have any) so we can
-             * write leading zeroes first.
-             */
-
-            if (_is_integer_specifier(spec_info->spec)) {
-                sv =
-                    _write_signs_for_integer_specifier(sv,
-                                                       should_cont_in,
-                                                       written_out,
-                                                       spec_info,
-                                                       char_cb,
-                                                       char_cb_info);
-            }
-
-            /*
-             * Integer flags are also added to PRINTF_SPECIFIER_POINTER, so
-             * this function must be called outside _is_integer_specifier()
-             * scope.
-             */
-
-            *written_out +=
-                _handle_integer_flags(spec_info,
-                                      should_cont_in,
-                                      char_cb,
-                                      char_cb_info,
-                                      sv_cb,
-                                      sv_cb_info);
-
-            *written_out +=
-                char_cb(spec_info, char_cb_info, '0', amt, should_cont_in);
-
-            if (!*should_cont_in) {
-                return sv;
-            }
-        } else {
-            *written_out +=
-                char_cb(spec_info, char_cb_info, ' ', amt, should_cont_in);
-
-            if (!*should_cont_in) {
-                return sv;
-            }
-
-            *written_out +=
-                _handle_integer_flags(spec_info,
-                                      should_cont_in,
-                                      char_cb,
-                                      char_cb_info,
-                                      sv_cb,
-                                      sv_cb_info);
-        }
-
-        return sv;
-    }
-
-    const enum printf_specifier spec = spec_info->spec;
-    if (_is_integer_specifier(spec)) {
-        const int precision = spec_info->precision;
-        if (precision != -1) {
-            /*
-             * For integer-specifiers, precision encodes the *minimum* amount of
-             * digits to be printed.
-             *
-             * If minimum is not met, then the string must be padded with
-             * leading zeroes.
-             */
-
-            uintptr_t digit_count = sv.length;
-
-            /*
-             * The number of digits doesn't include the negative sign.
-             */
-
-            if (sv.string[0] == '-') {
-                digit_count -= 1;
-            }
-
-            if (digit_count >= (uintptr_t)precision) {
-                return sv;
-            }
-
-            const uintptr_t amt = ((uintptr_t)precision - digit_count);
-            sv =
-                _write_signs_for_integer_specifier(sv,
-                                                   should_cont_in,
-                                                   written_out,
-                                                   spec_info,
-                                                   char_cb,
-                                                   char_cb_info);
-
-            *written_out +=
-                char_cb(spec_info, char_cb_info, '0', amt, should_cont_in);
-        }
-
-        *written_out +=
-            _handle_integer_flags(spec_info,
-                                  should_cont_in,
-                                  char_cb,
-                                  char_cb_info,
-                                  sv_cb,
-                                  sv_cb_info);
-    }
-
-    return sv;
-}
-
-static inline uintptr_t
-_call_callback(const struct printf_spec_info *const spec_info,
-               const struct string_view sv,
-               bool *const should_cont_in,
-               const printf_write_char_callback_t char_cb,
-               void *const char_cb_info,
-               const printf_write_string_callback_t string_cb,
-               void *const sv_cb_info)
+call_cb(const struct printf_spec_info *const spec_info,
+        const struct string_view sv,
+        const printf_write_char_callback_t char_cb,
+        void *const char_cb_info,
+        const printf_write_string_callback_t string_cb,
+        void *const sv_cb_info,
+        bool *const should_cont_in)
 {
     if (sv.length == 0) {
         return 0;
@@ -805,342 +753,302 @@ _call_callback(const struct printf_spec_info *const spec_info,
         const uintptr_t result =
              string_cb(spec_info,
                        sv_cb_info,
-                       sv.string,
+                       sv.begin,
                        sv.length,
                        should_cont_in);
         return result;
     }
 
-    const char front = sv.string[0];
+    const char front = sv.begin[0];
     return char_cb(spec_info, char_cb_info, front, 1, should_cont_in);
 }
 
 /******* PUBLIC FUNCTIONS *******/
 
-uintptr_t
-parse_printf_format(const printf_write_char_callback_t char_cb,
-                    void *const char_cb_info,
-                    const printf_write_string_callback_t string_cb,
-                    void *const string_cb_info,
-                    const char *const c_str,
+uint64_t
+parse_printf_format(const printf_write_char_callback_t write_char_cb,
+                    void *const write_char_cb_info,
+                    const printf_write_string_callback_t write_string_cb,
+                    void *const write_string_cb_info,
+                    const char *const fmt,
                     va_list list)
 {
-    /*
-     * Keep a buffer to store conversions to string that can be passed to
-     * callback.
-     */
-
-    char conv_buffer[LARGEST_BUFFER_LENGTH] = {};
-
-    /*
-     * We need to store va_list in a struct to pass it by reference.
-     * Source: https://stackoverflow.com/a/8047513
-     */
-
     struct va_list_struct list_struct = {};
     va_copy(list_struct.list, list);
 
-    /*
-     * Store a range (pointer and length) to a portion of the string that is
-     * unformatted and can just be passed to the callback.
-     */
+    // Add 2 for a int-prefix, and one for a sign.
+    char buffer[LARGEST_BUFFER_LENGTH] = {};
 
-    const char *unformat_buffer_ptr = c_str;
+    struct printf_spec_info curr_spec = {};
+    const char *unformatted_start = fmt;
+
+    uint64_t written_out = 0;
     bool should_continue = true;
 
-    uintptr_t unformat_buffer_length = 0;
-    uintptr_t written_out = 0;
+    for (const char *iter = strchr(fmt, '%');
+         iter != NULL;
+         iter = strchr(iter, '%'))
+    {
+        const struct string_view unformatted =
+            sv_create_end(unformatted_start, iter);
 
-    const char *iter = c_str;
-    struct printf_spec_info spec_info = {};
-
-    for (char ch = *iter; ch != '\0'; ch = *(++iter)) {
-        if (ch != '%') {
-            unformat_buffer_length += 1;
-            continue;
-        }
-
-        const struct string_view unformat_buffer_sv =
-            sv_create_from_c_str_and_len(unformat_buffer_ptr,
-                                         unformat_buffer_length);
-
+        curr_spec = (struct printf_spec_info){};
         written_out +=
-            _call_callback(&spec_info,
-                           unformat_buffer_sv,
-                           &should_continue,
-                           char_cb,
-                           char_cb_info,
-                           string_cb,
-                           string_cb_info);
+            call_cb(&curr_spec,
+                    unformatted,
+                    write_char_cb,
+                    write_char_cb_info,
+                    write_string_cb,
+                    write_string_cb_info,
+                    &should_continue);
 
         if (!should_continue) {
-            goto done;
+            break;
         }
 
-        /*
-         * Keep a pointer to the start of the format, because if this
-         * format-specifier is invalid, we'll need to treat it as an ordinary
-         * unformatted string.
-         */
+        iter++;
+        if (*iter == '\0') {
+            // If we only got a percent sign, then we don't print anything
+            return written_out;
+        }
 
-        const char *const orig_iter = iter;
+        // Format is %[flags][width][.precision][length]specifier
+        if (!parse_flags(&curr_spec, iter, &iter)) {
+            // If we have an incomplete spec, then we exit without writing
+            // anything.
+            return written_out;
+        }
 
-        /* Skip past the '%' char */
+        if (!parse_width(&curr_spec, &list_struct, iter, &iter)) {
+            // If we have an incomplete spec, then we exit without writing
+            // anything.
+            return written_out;
+        }
+
+        if (!parse_precision(&curr_spec, iter, &list_struct, &iter)) {
+            // If we have an incomplete spec, then we exit without writing
+            // anything.
+            return written_out;
+        }
+
+        // Parse length
+        uint64_t number = 0;
+        bool is_zero = false;
+
+        if (!parse_length(&curr_spec,
+                          iter,
+                          &iter,
+                          &list_struct,
+                          &number,
+                          &is_zero))
+        {
+            // If we have an incomplete spec, then we exit without writing
+            // anything.
+            return written_out;
+        }
+
+        // Parse specifier
+        struct string_view parsed = {};
+        bool is_null = false;
+
+        curr_spec.spec = *iter;
+        unformatted_start = iter + 1;
+
+        const enum handle_spec_result handle_spec_result =
+            handle_spec(&curr_spec,
+                        iter,
+                        buffer,
+                        number,
+                        &list_struct,
+                        written_out,
+                        &unformatted_start,
+                        &parsed,
+                        &is_zero,
+                        &is_null);
+
+        switch (handle_spec_result) {
+            case E_HANDLE_SPEC_OK:
+                break;
+            case E_HANDLE_SPEC_REACHED_END:
+                return written_out;
+            case E_HANDLE_SPEC_CONTINUE:
+                continue;
+        }
+
+
+        /* Move past specifier */
         iter++;
 
-        spec_info.flags = _parse_printf_flags(iter, &iter);
-        spec_info.width = _parse_printf_width(iter, &list_struct, &iter);
-        spec_info.precision =
-            _parse_printf_precision(iter, &list_struct, &iter);
+        uint32_t padded_zero_count = 0;
+        uint8_t parsed_length = parsed.length;
 
-        spec_info.length = _parse_printf_length(iter, &iter);
-        spec_info.spec = *iter;
+        // is_zero being true implies spec is an integer.
+        // We don't write anything if we have a '0' and precision is 0.
 
-        struct string_view sv =
-            _handle_printf_specifier(conv_buffer,
-                                     &list_struct,
-                                     &spec_info.flags,
-                                     written_out,
-                                     spec_info.spec,
-                                     spec_info.length);
-
-        sv =
-            _handle_printf_qualities(&spec_info,
-                                     sv,
-                                     &written_out,
-                                     &should_continue,
-                                     char_cb,
-                                     char_cb_info,
-                                     string_cb,
-                                     string_cb_info);
-
-        if (!should_continue) {
-            goto done;
+        const bool should_write_parsed = !(is_zero && curr_spec.precision == 0);
+        if (!should_write_parsed) {
+            parsed_length = 0;
+        } else if (curr_spec.add_base_prefix) {
+            switch (curr_spec.spec) {
+                case 'o':
+                    parsed_length += 1;
+                    break;
+                case 'x':
+                case 'X':
+                    parsed_length += 2;
+                    break;
+            }
         }
 
-        /*
-         * The string pointer of the string-view will be set to NULL if the
-         * format-specifier was invalid.
-         */
+        // If we're not wider than the specified width, we have to pad with
+        // either spaces or zeroes.
 
-        if (sv.string != NULL) {
-            written_out +=
-                _call_callback(&spec_info,
-                               sv,
-                               &should_continue,
-                               char_cb,
-                               char_cb_info,
-                               string_cb,
-                               string_cb_info);
+        uint32_t space_pad_count = 0;
+        if (is_int_specifier(curr_spec.spec)) {
+            if (curr_spec.precision != -1) {
+                // The case for the string-spec was already handled above
+                // Total digit count doesn't include the sign/prefix.
 
-            if (!should_continue) {
-                goto done;
+                uint8_t total_digit_count = parsed.length;
+                if (*parsed.begin == '-' || *parsed.begin == '+') {
+                    total_digit_count -= 1;
+                }
+
+                if (total_digit_count < curr_spec.precision) {
+                    padded_zero_count =
+                        (uint32_t)curr_spec.precision - total_digit_count;
+
+                    parsed_length += padded_zero_count;
+                }
             }
 
-            /*
-            * Reset the unformat-buffer having written out a
-            * formatted-string.
-            */
+            if (parsed_length != 0 && curr_spec.add_one_space_for_sign) {
+                // Only add a sign if we have neither a '+' or '-'
+                if (*parsed.begin != '+' && *parsed.begin != '-') {
+                    space_pad_count += 1;
+                }
+            }
+        }
 
-            unformat_buffer_ptr = iter + 1;
-            unformat_buffer_length = 0;
+        if (parsed_length < curr_spec.width) {
+            const bool pad_with_zeros =
+                curr_spec.leftpad_zeros &&
+                is_int_specifier(curr_spec.spec) &&
+                curr_spec.precision == -1 &&
+                !curr_spec.left_justify; // Zeros are never left-justified
+
+            if (pad_with_zeros) {
+                // We're always resetting padded_zero_count if it was set before
+                padded_zero_count = curr_spec.width - parsed_length;
+            } else {
+                space_pad_count += curr_spec.width - parsed_length;
+            }
+        }
+
+        if (curr_spec.left_justify) {
+            written_out +=
+                pad_with_lead_zeros(&curr_spec,
+                                    &parsed,
+                                    padded_zero_count,
+                                    is_null,
+                                    write_char_cb,
+                                    write_char_cb_info,
+                                    write_string_cb,
+                                    write_string_cb_info,
+                                    &should_continue);
+
+            if (!should_continue) {
+                return written_out;
+            }
+
+            if (should_write_parsed) {
+                written_out +=
+                    call_cb(&curr_spec,
+                            parsed,
+                            write_char_cb,
+                            write_char_cb_info,
+                            write_string_cb,
+                            write_string_cb_info,
+                            &should_continue);
+
+                if (!should_continue) {
+                    return written_out;
+                }
+            }
+
+            if (space_pad_count != 0) {
+                written_out +=
+                    write_char_cb(&curr_spec,
+                                  write_char_cb_info,
+                                  ' ',
+                                  space_pad_count,
+                                  &should_continue);
+
+                if (!should_continue) {
+                    return written_out;
+                }
+            }
         } else {
-            /*
-             * Invalid format-specifiers are treated as otherwise unformatted
-             * strings.
-             */
+            if (space_pad_count != 0) {
+                written_out +=
+                    write_char_cb(&curr_spec,
+                                  write_char_cb_info,
+                                  ' ',
+                                  space_pad_count,
+                                  &should_continue);
 
-            unformat_buffer_ptr = orig_iter;
-            unformat_buffer_length = (iter - orig_iter) + 1;
+                if (!should_continue) {
+                    return written_out;
+                }
+            }
+
+            written_out +=
+                pad_with_lead_zeros(&curr_spec,
+                                    &parsed,
+                                    padded_zero_count,
+                                    is_null,
+                                    write_char_cb,
+                                    write_char_cb_info,
+                                    write_string_cb,
+                                    write_string_cb_info,
+                                    &should_continue);
+
+            if (!should_continue) {
+                return written_out;
+            }
+
+            if (should_write_parsed) {
+                written_out +=
+                    call_cb(&curr_spec,
+                            parsed,
+                            write_char_cb,
+                            write_char_cb_info,
+                            write_string_cb,
+                            write_string_cb_info,
+                            &should_continue);
+
+                if (!should_continue) {
+                    return written_out;
+                }
+            }
+
         }
     }
 
-    if (unformat_buffer_length != 0) {
-        const struct string_view sv =
-            sv_create_from_c_str_and_len(unformat_buffer_ptr,
-                                         unformat_buffer_length);
+    if (*unformatted_start != '\0') {
+        const struct string_view unformatted =
+            sv_create_length(unformatted_start, strlen(unformatted_start));
 
+        curr_spec = (struct printf_spec_info){};
         written_out +=
-            _call_callback(&spec_info,
-                           sv,
-                           &should_continue,
-                           char_cb,
-                           char_cb_info,
-                           string_cb,
-                           string_cb_info);
+            call_cb(&curr_spec,
+                    unformatted,
+                    write_char_cb,
+                    write_char_cb_info,
+                    write_string_cb,
+                    write_string_cb_info,
+                    &should_continue);
     }
 
-done:
     return written_out;
-}
-
-struct callback_info {
-    char *buffer_in;
-    uintptr_t buffer_used;
-    uintptr_t buffer_size;
-};
-
-uintptr_t
-format_to_string(char *const buffer_in,
-                 const uintptr_t buffer_len,
-                 const char *const format,
-                 ...)
-{
-    va_list list;
-    va_start(list, format);
-
-    const uintptr_t result =
-        vformat_to_string(buffer_in, buffer_len, format, list);
-
-    va_end(list);
-    return result;
-}
-
-static uintptr_t
-_format_to_string_write_ch_callback(
-    __unused const struct printf_spec_info *const spec_info,
-    __unused void *const info,
-    const char ch,
-    uintptr_t amount,
-    bool *const should_continue_out)
-{
-    struct callback_info *const cb_info = (struct callback_info *)info;
-    const uintptr_t old_used = cb_info->buffer_used;
-    uintptr_t new_used = old_used;
-
-    if (__builtin_add_overflow(new_used, amount, &new_used)) {
-        *should_continue_out = false;
-        return 0;
-    }
-
-    const uintptr_t buffer_size = cb_info->buffer_size;
-    if (new_used >= buffer_size) {
-        /*
-         * Truncate amount to just the space left if we don't have enough space
-         * in the buffer to copy the whole string.
-         */
-
-        amount = (buffer_size - old_used);
-        *should_continue_out = false;
-
-        cb_info->buffer_used = old_used + amount;
-    } else {
-        cb_info->buffer_used = new_used;
-    }
-
-    memset(cb_info->buffer_in + old_used, ch, amount);
-    return amount;
-}
-
-static uintptr_t
-_format_to_string_write_string_callback(
-    __unused const struct printf_spec_info *const spec_info,
-    __unused void *const info,
-    const char *const string,
-    const uintptr_t length,
-    bool *const should_continue_out)
-{
-    struct callback_info *const cb_info = (struct callback_info *)info;
-    const uintptr_t old_used = cb_info->buffer_used;
-
-    uintptr_t new_used = old_used;
-    if (__builtin_add_overflow(new_used, length, &new_used)) {
-        *should_continue_out = false;
-        return 0;
-    }
-
-    const uintptr_t buffer_size = cb_info->buffer_size;
-    uintptr_t amount = length;
-
-    if (new_used >= buffer_size) {
-        /*
-         * Truncate amount to just the space left if we don't have enough space
-         * in the buffer to copy the whole string.
-         */
-
-        amount = (buffer_size - old_used);
-        *should_continue_out = false;
-
-        cb_info->buffer_used = old_used + amount;
-    } else {
-        cb_info->buffer_used = new_used;
-    }
-
-    memcpy(cb_info->buffer_in + old_used, string, amount);
-    return amount;
-}
-
-uintptr_t
-vformat_to_string(char *const buffer_in,
-                  const uintptr_t buffer_len,
-                  const char *const format,
-                  va_list list)
-{
-    if (buffer_len == 0) {
-        return 0;
-    }
-
-    /*
-     * Subtract one so that buffer can contain a null-terminator.
-     */
-
-    struct callback_info cb_info = {
-        .buffer_in = buffer_in,
-        .buffer_used = 0,
-        .buffer_size = buffer_len - 1
-    };
-
-    const uintptr_t length =
-        parse_printf_format(_format_to_string_write_ch_callback,
-                            &cb_info,
-                            _format_to_string_write_string_callback,
-                            &cb_info,
-                            format,
-                            list);
-
-    cb_info.buffer_in[cb_info.buffer_used] = '\0';
-    return length;
-}
-
-static uintptr_t
-_get_length_ch_callback(
-    __unused const struct printf_spec_info *const spec_info,
-    __unused void *const cb_info,
-    __unused const char ch,
-    __unused const uintptr_t times,
-    __unused bool *const should_continue_out)
-{
-    return times;
-}
-
-static uintptr_t
-_get_length_string_callback(
-    __unused const struct printf_spec_info *const spec_info,
-    __unused void *const cb_info,
-    __unused const char *const string,
-    const uintptr_t length,
-    __unused bool *const should_continue_out)
-{
-    return length;
-}
-
-uintptr_t get_length_of_printf_format(const char *const fmt, ...) {
-    va_list list;
-    va_start(list, fmt);
-
-    const uintptr_t result = get_length_of_printf_vformat(fmt, list);
-
-    va_end(list);
-    return result;
-}
-
-uintptr_t get_length_of_printf_vformat(const char *const fmt, va_list list) {
-    const uintptr_t length =
-        parse_printf_format(_get_length_ch_callback,
-                            NULL,
-                            _get_length_string_callback,
-                            NULL,
-                            fmt,
-                            list);
-    return length;
 }
