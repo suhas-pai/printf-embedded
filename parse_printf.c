@@ -611,7 +611,7 @@ handle_spec(struct printf_spec_info *const curr_spec,
                     break;
                 case 'l':
                     // case 'll'
-                    if (curr_spec->length_info[1] == 'h') {
+                    if (curr_spec->length_info[1] == 'l') {
                         *va_arg(list_struct->list, signed char *) =
                             written_out;
 
