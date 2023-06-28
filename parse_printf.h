@@ -35,7 +35,7 @@ struct printf_spec_info {
     bool leftpad_zeros : 1;
 
     uint32_t width;
-    int precision;
+    int precision; // -1 if no precision was provided
 
     const char *length_info;
     char spec;
