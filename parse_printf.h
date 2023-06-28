@@ -47,19 +47,18 @@ struct printf_spec_info {
  */
 
 typedef uint64_t
-(*printf_write_char_callback_t)(const struct printf_spec_info *const spec_info,
+(*printf_write_char_callback_t)(const struct printf_spec_info *spec_info,
                                 void *info,
                                 char ch,
                                 uint64_t times,
                                 bool *should_continue_out);
 
 typedef uint64_t
-(*printf_write_string_callback_t)(
-    const struct printf_spec_info *const spec_info,
-    void *info,
-    const char *string,
-    uint64_t length,
-    bool *should_continue_out);
+(*printf_write_string_callback_t)(const struct printf_spec_info *spec_info,
+                                  void *info,
+                                  const char *string,
+                                  uint64_t length,
+                                  bool *should_continue_out);
 
 uint64_t
 parse_printf_format(printf_write_char_callback_t char_cb,
