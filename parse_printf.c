@@ -798,10 +798,8 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
     uint64_t written_out = 0;
     bool should_continue = true;
 
-    for (const char *iter = strchr(fmt, '%');
-         iter != NULL;
-         iter = strchr(iter, '%'))
-    {
+    const char *iter = strchr(fmt, '%');
+    for (; iter != NULL; iter = strchr(iter, '%')) {
         const struct string_view unformatted =
             sv_create_end(unformatted_start, iter);
 
@@ -948,7 +946,7 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
                 curr_spec.leftpad_zeros &&
                 is_int_specifier(curr_spec.spec) &&
                 curr_spec.precision == -1 &&
-                !curr_spec.left_justify; // Zeros are never left-justified
+                !curr_spec.left_justify; // Never left-justify padded zeros
 
             if (pad_with_zeros) {
                 // We're always resetting padded_zero_count if it was set before
@@ -1049,7 +1047,7 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
 
     if (*unformatted_start != '\0') {
         const struct string_view unformatted =
-            sv_create_length(unformatted_start, strlen(unformatted_start));
+            sv_create_end(unformatted_start, iter);
 
         curr_spec = (struct printf_spec_info){};
         written_out +=
