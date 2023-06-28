@@ -505,7 +505,7 @@ handle_spec(struct printf_spec_info *const curr_spec,
                                         buffer,
                                         /*uppercase=*/false,
                                         /*include_prefix=*/false,
-                                        curr_spec->add_pos_sign);
+                                        /*add_pos_sign=*/false);
             break;
         case 'o':
             if (curr_spec->length_info == NULL) {
@@ -519,7 +519,7 @@ handle_spec(struct printf_spec_info *const curr_spec,
                                         buffer,
                                         /*uppercase=*/false,
                                         /*include_prefix=*/false,
-                                        curr_spec->add_pos_sign);
+                                        /*add_pos_sign=*/false);
             break;
         case 'x':
             if (curr_spec->length_info == NULL) {
