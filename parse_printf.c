@@ -210,7 +210,7 @@ parse_flags(struct printf_spec_info *const curr_spec,
                 curr_spec->add_one_space_for_sign = true;
                 goto check_iter;
             case '-':
-                curr_spec->left_justify = 1;
+                curr_spec->left_justify = true;
                 goto check_iter;
             case '+':
                 curr_spec->add_pos_sign = true;
