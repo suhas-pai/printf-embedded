@@ -87,11 +87,6 @@ unsigned_to_string_view(uint64_t number,
         number /= base;
     } while (true);
 
-    if (add_pos_sign) {
-        i -= 1;
-        buffer_in[i] = '+';
-    }
-
     if (include_prefix) {
         buffer_in[i - 2] = '0';
         switch (base) {
@@ -109,6 +104,11 @@ unsigned_to_string_view(uint64_t number,
         }
 
         i -= 2;
+    }
+
+    if (add_pos_sign) {
+        i -= 1;
+        buffer_in[i] = '+';
     }
 
     /* Make end point to the null-terminator */
