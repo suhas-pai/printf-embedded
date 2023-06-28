@@ -97,6 +97,7 @@ unsigned_to_string_view(uint64_t number,
                 buffer_in[i - 1] = 'o';
                 break;
             case NUMERIC_BASE_10:
+                // This should never be reached.
                 break;
             case NUMERIC_BASE_16:
                 buffer_in[i - 1] = 'x';
@@ -153,6 +154,7 @@ convert_neg_64int_to_string(int64_t number,
                 buffer_in[i - 1] = 'o';
                 break;
             case NUMERIC_BASE_10:
+                // This should never be reached.
                 break;
             case NUMERIC_BASE_16:
                 buffer_in[i - 1] = 'x';
@@ -578,7 +580,7 @@ handle_spec(struct printf_spec_info *const curr_spec,
             if (arg != NULL) {
                 *parsed_out =
                     unsigned_to_string_view((uint64_t)arg,
-                                            /*base=*/16,
+                                            NUMERIC_BASE_16,
                                             buffer,
                                             /*uppercase=*/true,
                                             /*include_prefix=*/true,
