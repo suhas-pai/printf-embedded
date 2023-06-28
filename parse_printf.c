@@ -725,7 +725,9 @@ pad_with_lead_zeros(struct printf_spec_info *const info,
 
     const char front = *parsed->begin;
     if (front == '+') {
-        // We only have a positive sign when one is requested.
+        // Avoid an extra check as only have a positive sign when the spec
+        // requested one.
+
         out += write_char_cb(info, cb_info, '+', /*amount=*/1, cont_out);
         if (!cont_out) {
             return out;
