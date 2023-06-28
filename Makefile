@@ -3,10 +3,10 @@ DEBUGOBJ=debug-obj
 OBJ=obj
 SRC=src
 
-SRCS=printf.c example.c test.c
+SRCS=parse_printf.c example.c test.c
 OBJS=$(foreach obj,$(SRCS:src/%=%),$(OBJ)/$(basename $(obj)).o)
 
-CFLAGS=-Iinclude/ -Wall
+CFLAGS=-Iinclude/ -Wall -Wextra
 DEBUGCFLAGS=$(CFLAGS) -g3
 RELEASECFLAGS=$(CFLAGS) -Ofast
 

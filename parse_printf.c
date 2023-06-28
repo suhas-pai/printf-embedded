@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <string.h>
 
-#include "printf.h"
+#include "parse_printf.h"
 
 struct string_view {
     const char *begin;
@@ -65,7 +65,8 @@ unsigned_to_string_view(uint64_t number,
                         const enum numeric_base base,
                         char buffer_in[static const LARGEST_BUFFER_LENGTH],
                         const bool uppercase,
-                        const bool include_prefix)
+                        const bool include_prefix,
+                        const bool add_pos_sign)
 {
     // Subtract one from the buffer-size to convert ordinal to index.
 
@@ -86,7 +87,12 @@ unsigned_to_string_view(uint64_t number,
         number /= base;
     } while (true);
 
-    if (include_prefix) {
+    if (add_pos_sign) {
+        i -= 1;
+        buffer_in[i] = '+';
+    }
+
+    if (include_prefix && base != NUMERIC_BASE_10) {
         buffer_in[i - 2] = '0';
         switch (base) {
             case NUMERIC_BASE_2:
@@ -126,9 +132,10 @@ convert_neg_64int_to_string(int64_t number,
     buffer_in[i] = '\0';
     i--;
 
+    const int64_t neg_base = 0 - (int64_t)base;
     do {
         buffer_in[i] = alphadigit_string[0 - (number % base)];
-        if (number > (0 - base)) {
+        if (number >= neg_base) {
             break;
         }
 
@@ -155,6 +162,9 @@ convert_neg_64int_to_string(int64_t number,
         i -= 2;
     }
 
+    buffer_in[i - 1] = '-';
+    i -= 1;
+
     /* Make end point to the null-terminator */
     const char *const end = buffer_in + (LARGEST_BUFFER_LENGTH - 1);
     return sv_create_end(buffer_in + i, end);
@@ -165,7 +175,8 @@ signed_to_string_view(const int64_t number,
                       const enum numeric_base base,
                       char buffer_in[static const LARGEST_BUFFER_LENGTH],
                       const bool uppercase,
-                      const bool include_prefix)
+                      const bool include_prefix,
+                      const bool add_pos_sign)
 {
     struct string_view result = {};
     if (number > 0) {
@@ -174,7 +185,8 @@ signed_to_string_view(const int64_t number,
                                     base,
                                     buffer_in,
                                     uppercase,
-                                    include_prefix);
+                                    include_prefix,
+                                    add_pos_sign);
     } else {
         result =
             convert_neg_64int_to_string(number,
@@ -477,7 +489,8 @@ handle_spec(struct printf_spec_info *const curr_spec,
                                       NUMERIC_BASE_10,
                                       buffer,
                                       /*uppercase=*/false,
-                                      /*include_prefix=*/false);
+                                      /*include_prefix=*/false,
+                                      curr_spec->add_pos_sign);
             break;
         case 'u':
             if (curr_spec->length_info == NULL) {
@@ -490,7 +503,8 @@ handle_spec(struct printf_spec_info *const curr_spec,
                                         NUMERIC_BASE_10,
                                         buffer,
                                         /*uppercase=*/false,
-                                        /*include_prefix=*/false);
+                                        /*include_prefix=*/false,
+                                        curr_spec->add_pos_sign);
             break;
         case 'o':
             if (curr_spec->length_info == NULL) {
@@ -503,7 +517,8 @@ handle_spec(struct printf_spec_info *const curr_spec,
                                         NUMERIC_BASE_8,
                                         buffer,
                                         /*uppercase=*/false,
-                                        /*include_prefix=*/false);
+                                        /*include_prefix=*/false,
+                                        curr_spec->add_pos_sign);
             break;
         case 'x':
             if (curr_spec->length_info == NULL) {
@@ -516,7 +531,8 @@ handle_spec(struct printf_spec_info *const curr_spec,
                                         NUMERIC_BASE_16,
                                         buffer,
                                         /*uppercase=*/false,
-                                        /*include_prefix=*/false);
+                                        /*include_prefix=*/false,
+                                        /*add_pos_sign=*/false);
             break;
         case 'X': {
             if (curr_spec->length_info == NULL) {
@@ -529,7 +545,8 @@ handle_spec(struct printf_spec_info *const curr_spec,
                                         NUMERIC_BASE_16,
                                         buffer,
                                         /*uppercase=*/true,
-                                        /*include_prefix=*/false);
+                                        /*include_prefix=*/false,
+                                        /*add_pos_sign=*/false);
             break;
         }
         case 'c':
@@ -563,7 +580,8 @@ handle_spec(struct printf_spec_info *const curr_spec,
                                             /*base=*/16,
                                             buffer,
                                             /*uppercase=*/true,
-                                            /*include_prefix=*/true);
+                                            /*include_prefix=*/true,
+                                            /*add_pos_sign=*/false);
             } else {
                 *parsed_out = SV_STATIC("(nil)");
                 *is_null_out = true;
@@ -1026,7 +1044,6 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
                     return written_out;
                 }
             }
-
         }
     }
 
