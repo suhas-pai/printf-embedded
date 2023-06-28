@@ -135,7 +135,7 @@ convert_neg_64int_to_string(int64_t number,
     const int64_t neg_base = 0 - (int64_t)base;
     do {
         buffer_in[i] = alphadigit_string[0 - (number % base)];
-        if (number >= neg_base) {
+        if (number > neg_base) {
             break;
         }
 
