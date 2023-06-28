@@ -1,8 +1,3 @@
-/*
- * src/printf.c
- * © suhas pai
- */
-
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>

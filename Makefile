@@ -3,7 +3,7 @@ DEBUGOBJ=debug-obj
 OBJ=obj
 SRC=src
 
-SRCS=$(shell find $(SRC) -type f -name '*.c')
+SRCS=printf.c example.c test.c
 OBJS=$(foreach obj,$(SRCS:src/%=%),$(OBJ)/$(basename $(obj)).o)
 
 CFLAGS=-Iinclude/ -Wall
@@ -37,16 +37,16 @@ $(DEBUGTARGET): $(DEBUGOBJS)
 	@mkdir -p $(dir $(DEBUGTARGET))
 	@$(CC) $^ -o $@
 
-$(OBJ)/%.o: $(SRC)/%.c
+$(OBJ)/%.o: %.c
 	@mkdir -p $(shell dirname $@)
 	@$(CC) $(RELEASECFLAGS) -c $< -o $@
 
-$(DEBUGOBJ)/%.d.o: $(SRC)/%.c
+$(DEBUGOBJ)/%.d.o: %.c
 	@mkdir -p $(shell dirname $@)
 	@$(CC) $(DEBUGCFLAGS) -c $< -o $@
 
 compile_commands: clean
-	@compiledb make
+	@bear -- make
 
 print_info:
 	@echo $(OBJS)

@@ -1,8 +1,3 @@
-/*
- * src/main.c
- * © suhas pai
- */
-
 #include <assert.h>
 #include <stdbool.h>
 #include <string.h>

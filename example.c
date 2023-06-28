@@ -1,6 +1,3 @@
-/*
-*/
-
 #include "example.h"
 #include "printf.h"
 
