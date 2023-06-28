@@ -348,14 +348,15 @@ parse_length(struct printf_spec_info *const curr_spec,
 {
     switch (*iter) {
         case '\0':
-            // If we incomplete spec, then we exit without writing anything.
+            // If we have an incomplete spec, then we exit without writing
+            // anything.
             return false;
         case 'h': {
             iter++;
             switch (*iter) {
                 case '\0':
-                    // If we incomplete spec, then we exit without writing
-                    // anything.
+                    // If we have an incomplete spec, then we exit without
+                    // writing anything.
                     return false;
                 case 'h': {
                     const uint64_t number =
