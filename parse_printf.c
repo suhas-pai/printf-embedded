@@ -472,7 +472,6 @@ handle_spec(struct printf_spec_info *const curr_spec,
             uint64_t number,
             struct va_list_struct *const list_struct,
             const uint64_t written_out,
-            const char **const unformatted_start_out,
             struct string_view *const parsed_out,
             bool *const is_zero_out,
             bool *const is_null_out)
@@ -646,12 +645,7 @@ handle_spec(struct printf_spec_info *const curr_spec,
 
             break;
         default:
-            if (curr_spec->spec >= '0' && curr_spec->spec <= '9') {
-                *unformatted_start_out = iter + 1;
-                return E_HANDLE_SPEC_CONTINUE;
-            }
-
-            break;
+            return E_HANDLE_SPEC_CONTINUE;
     }
 
     return E_HANDLE_SPEC_OK;
@@ -808,7 +802,7 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
 
         curr_spec = (struct printf_spec_info){};
         written_out +=
-            call_cb(&curr_spec,
+            call_cb(NULL,
                     unformatted,
                     write_char_cb,
                     write_char_cb_info,
@@ -875,7 +869,6 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
                         number,
                         &list_struct,
                         written_out,
-                        &unformatted_start,
                         &parsed,
                         &is_zero,
                         &is_null);
@@ -1053,7 +1046,7 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
 
         curr_spec = (struct printf_spec_info){};
         written_out +=
-            call_cb(&curr_spec,
+            call_cb(NULL,
                     unformatted,
                     write_char_cb,
                     write_char_cb_info,

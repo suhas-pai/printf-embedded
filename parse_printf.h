@@ -44,6 +44,8 @@ struct printf_spec_info {
 /*
  * All callbacks should return length written-out.
  * should_continue_out is initialized to true.
+ *
+ * spec_info is NULL for callbacks to write unformatted strings.
  */
 
 typedef uint64_t
