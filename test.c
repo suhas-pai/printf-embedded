@@ -1,8 +1,18 @@
 #include <assert.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "example.h"
+
+#define check_strings(buffer, expected)                                        \
+    do {                                                                       \
+        if (strcmp(buffer, expected) != 0) {                                   \
+            printf("MISMATCH: \"%s\" vs expected \"%s\"\n", buffer, expected); \
+            exit(1);                                                           \
+        }                                                                      \
+    } while (false);
 
 #define test_format_to_buffer(buffer_len, expected, str, ...)                  \
     do {                                                                       \
@@ -14,7 +24,7 @@
                              ##__VA_ARGS__,                                    \
                              &count);                                          \
                                                                                \
-        assert(strcmp(buffer, expected) == 0);                                 \
+        check_strings(buffer, expected);                                       \
         assert(length == (sizeof(expected) - 1));                              \
         assert(count == (int)(sizeof(expected) - 1));                          \
         memset(buffer, '\0', sizeof(buffer));                                  \
@@ -165,6 +175,7 @@ int main(const int argc, const char *const argv[]) {
     test_format_to_buffer(sizeof(buffer), "A", "%+X", 10);
     test_format_to_buffer(sizeof(buffer), "fffffff6", "%+x", -10);
     test_format_to_buffer(sizeof(buffer), "FFFFFFF6", "%+X", -10);
+    test_format_to_buffer(sizeof(buffer), "(nil)", "%+p", NULL);
     test_format_to_buffer_no_count(sizeof(buffer), "%", "%  %",  4);
     test_format_to_buffer_no_count(sizeof(buffer), "", "%", 0, "");
     test_format_to_buffer_no_count(sizeof(buffer), "", "%0", 0, "");
