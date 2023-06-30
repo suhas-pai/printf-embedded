@@ -467,7 +467,6 @@ enum handle_spec_result {
 
 static enum handle_spec_result
 handle_spec(struct printf_spec_info *const curr_spec,
-            const char *const iter,
             char *const buffer,
             uint64_t number,
             struct va_list_struct *const list_struct,
@@ -864,7 +863,6 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
 
         const enum handle_spec_result handle_spec_result =
             handle_spec(&curr_spec,
-                        iter,
                         buffer,
                         number,
                         &list_struct,
