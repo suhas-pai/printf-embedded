@@ -9,3 +9,4 @@ debug-obj/*
 
 compile_commands.json
 test
+test_debug

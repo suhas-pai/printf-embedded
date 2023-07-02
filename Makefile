@@ -11,8 +11,7 @@ DEBUGCFLAGS=$(CFLAGS) -g3
 RELEASECFLAGS=$(CFLAGS) -Ofast
 
 TARGET=test
-
-DEBUGTARGET=bin/printf_debug_test
+DEBUGTARGET=test_debug
 DEBUGOBJS=$(foreach obj,$(SRCS:src/%=%),$(DEBUGOBJ)/$(basename $(obj)).d.o)
 
 .PHONY: all clean debug compile_commands
