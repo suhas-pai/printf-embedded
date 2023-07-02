@@ -210,31 +210,30 @@ parse_flags(struct printf_spec_info *const curr_spec,
         switch (*iter) {
             case ' ':
                 curr_spec->add_one_space_for_sign = true;
-                goto check_iter;
+                break;
             case '-':
                 curr_spec->left_justify = true;
-                goto check_iter;
+                break;
             case '+':
                 curr_spec->add_pos_sign = true;
-                goto check_iter;
+                break;
             case '#':
                 curr_spec->add_base_prefix = true;
-                goto check_iter;
+                break;
             case '0':
                 curr_spec->leftpad_zeros = true;
-                goto check_iter;
-            check_iter:
-                iter++;
-                if (*iter == '\0') {
-                    return false;
-                }
-
-                continue;
+                break;
+            default:
+                goto done;
         }
 
-        break;
+        iter++;
+        if (*iter == '\0') {
+            return false;
+        }
     } while (true);
 
+done:
     *iter_out = iter;
     return true;
 }
@@ -245,7 +244,7 @@ read_int_from_fmt_string(const char *const c_str, const char **const iter_out) {
     const char *iter = c_str;
 
     for (char ch = *iter; ch != '\0'; ch = *(++iter)) {
-        const uint8_t digit = (ch - '0');
+        const uint8_t digit = ch - '0';
         if (digit >= 10) {
             *iter_out = iter;
             break;
@@ -304,7 +303,7 @@ parse_precision(struct printf_spec_info *const curr_spec,
 {
     curr_spec->precision = -1;
     if (*iter != '.') {
-        goto done;
+        return true;
     }
 
     iter++;
@@ -335,7 +334,6 @@ parse_precision(struct printf_spec_info *const curr_spec,
         }
     }
 
-done:
     *iter_out = iter;
     return true;
 }
@@ -452,7 +450,7 @@ parse_length(struct printf_spec_info *const curr_spec,
         }
         default:
             curr_spec->length_info = NULL;
-            break;
+            return true;
     }
 
     *iter_out = iter;
@@ -799,7 +797,6 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
         const struct string_view unformatted =
             sv_create_end(unformatted_start, iter);
 
-        curr_spec = (struct printf_spec_info){};
         written_out +=
             call_cb(NULL,
                     unformatted,
@@ -820,6 +817,7 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
         }
 
         // Format is %[flags][width][.precision][length]specifier
+        curr_spec = (struct printf_spec_info){};
         if (!parse_flags(&curr_spec, iter, &iter)) {
             // If we have an incomplete spec, then we exit without writing
             // anything.
@@ -1040,7 +1038,7 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
 
     if (*unformatted_start != '\0') {
         const struct string_view unformatted =
-            sv_create_end(unformatted_start, iter);
+            sv_create_length(unformatted_start, strlen(unformatted_start));
 
         curr_spec = (struct printf_spec_info){};
         written_out +=
