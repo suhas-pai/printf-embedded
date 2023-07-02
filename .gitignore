@@ -3,10 +3,9 @@
 .cache/*
 .vscode/*
 
-bin/*
-obj/*
-debug-obj/*
-
 compile_commands.json
 test
 test_debug
+
+*.o
+*.d.o

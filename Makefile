@@ -1,18 +1,15 @@
 CC=clang
-DEBUGOBJ=debug-obj
-OBJ=obj
-SRC=src
 
 SRCS=parse_printf.c example.c test.c
-OBJS=$(foreach obj,$(SRCS:src/%=%),$(OBJ)/$(basename $(obj)).o)
+OBJS=$(SRCS:.c=.o)
+DEBUG_OBJS=$(SRCS:.c=.d.o)
 
 CFLAGS=-Iinclude/ -Wall -Wextra
-DEBUGCFLAGS=$(CFLAGS) -g3
-RELEASECFLAGS=$(CFLAGS) -Ofast
+DEBUG_CFLAGS=$(CFLAGS) -g3
+RELEASE_CFLAGS=$(CFLAGS) -Ofast
 
 TARGET=test
-DEBUGTARGET=test_debug
-DEBUGOBJS=$(foreach obj,$(SRCS:src/%=%),$(DEBUGOBJ)/$(basename $(obj)).d.o)
+DEBUG_TARGET=test_debug
 
 .PHONY: all clean debug compile_commands
 all: $(TARGET)
@@ -23,26 +20,26 @@ $(TARGET): $(OBJS)
 	@strip $(TARGET)
 
 clean:
-	@find $(OBJ) -name '*.o' -type f -delete
+	@find . -name '*.o' -type f -delete
 	@$(RM) $(TARGET)
 
 debug_clean:
-	@find $(DEBUGOBJ) -name '*.d.o' -type f -delete
-	@$(RM) $(TARGET)
+	@find . -name '*.d.o' -type f -delete
+	@$(RM) $(DEBUG_TARGET)
 
-debug: $(DEBUGTARGET)
+debug: $(DEBUG_TARGET)
 
-$(DEBUGTARGET): $(DEBUGOBJS)
-	@mkdir -p $(dir $(DEBUGTARGET))
+$(DEBUG_TARGET): $(DEBUG_OBJS)
+	@mkdir -p $(dir $(DEBUG_TARGET))
 	@$(CC) $^ -o $@
 
-$(OBJ)/%.o: %.c
+%.o: %.c
 	@mkdir -p $(shell dirname $@)
-	@$(CC) $(RELEASECFLAGS) -c $< -o $@
+	@$(CC) $(RELEASE_CFLAGS) -c $< -o $@
 
-$(DEBUGOBJ)/%.d.o: %.c
+%.d.o: %.c
 	@mkdir -p $(shell dirname $@)
-	@$(CC) $(DEBUGCFLAGS) -c $< -o $@
+	@$(CC) $(DEBUG_CFLAGS) -c $< -o $@
 
 compile_commands: clean
 	@bear -- make
