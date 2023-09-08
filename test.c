@@ -170,6 +170,7 @@ int main(const int argc, const char *const argv[]) {
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat"
+#pragma GCC diagnostic ignored "-Wformat-extra-args"
     test_format_to_buffer(sizeof(buffer), "H    ", "%-05c", 'H');
     test_format_to_buffer(sizeof(buffer), "a", "%+x", 10);
     test_format_to_buffer(sizeof(buffer), "A", "%+X", 10);

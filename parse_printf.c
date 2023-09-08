@@ -813,6 +813,7 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
         iter++;
         if (*iter == '\0') {
             // If we only got a percent sign, then we don't print anything
+            va_end(list_struct.list);
             return written_out;
         }
 
@@ -821,18 +822,21 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
         if (!parse_flags(&curr_spec, iter, &iter)) {
             // If we have an incomplete spec, then we exit without writing
             // anything.
+            va_end(list_struct.list);
             return written_out;
         }
 
         if (!parse_width(&curr_spec, &list_struct, iter, &iter)) {
             // If we have an incomplete spec, then we exit without writing
             // anything.
+            va_end(list_struct.list);
             return written_out;
         }
 
         if (!parse_precision(&curr_spec, iter, &list_struct, &iter)) {
             // If we have an incomplete spec, then we exit without writing
             // anything.
+            va_end(list_struct.list);
             return written_out;
         }
 
@@ -873,6 +877,7 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
             case E_HANDLE_SPEC_OK:
                 break;
             case E_HANDLE_SPEC_REACHED_END:
+                va_end(list_struct.list);
                 return written_out;
             case E_HANDLE_SPEC_CONTINUE:
                 continue;
@@ -960,6 +965,7 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
                                     &should_continue);
 
             if (!should_continue) {
+                va_end(list_struct.list);
                 return written_out;
             }
 
@@ -974,6 +980,7 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
                             &should_continue);
 
                 if (!should_continue) {
+                    va_end(list_struct.list);
                     return written_out;
                 }
             }
@@ -987,6 +994,7 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
                                   &should_continue);
 
                 if (!should_continue) {
+                    va_end(list_struct.list);
                     return written_out;
                 }
             }
@@ -1000,6 +1008,7 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
                                   &should_continue);
 
                 if (!should_continue) {
+                    va_end(list_struct.list);
                     return written_out;
                 }
             }
@@ -1016,6 +1025,7 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
                                     &should_continue);
 
             if (!should_continue) {
+                va_end(list_struct.list);
                 return written_out;
             }
 
@@ -1030,6 +1040,7 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
                             &should_continue);
 
                 if (!should_continue) {
+                    va_end(list_struct.list);
                     return written_out;
                 }
             }
@@ -1051,5 +1062,6 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
                     &should_continue);
     }
 
+    va_end(list_struct.list);
     return written_out;
 }

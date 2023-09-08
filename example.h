@@ -38,7 +38,7 @@ vformat_to_buffer(char *buffer_in,
                   const char *format,
                   va_list list);
 
-__attribute__((format(printf, 1, 2)));
+__attribute__((format(printf, 1, 2)))
 uint64_t get_length_of_printf_format(const char *fmt, ...);
 
 uint64_t get_length_of_printf_vformat(const char *fmt, va_list list);
