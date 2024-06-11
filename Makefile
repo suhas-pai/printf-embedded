@@ -1,4 +1,4 @@
-CC=clang
+CC?=clang
 
 SRCS=parse_printf.c example.c test.c
 OBJS=$(SRCS:.c=.o)
@@ -42,7 +42,7 @@ $(DEBUG_TARGET): $(DEBUG_OBJS)
 	@$(CC) $(DEBUG_CFLAGS) -c $< -o $@
 
 compile_commands: clean
-	@bear -- make
+	compiledb make
 
 print_info:
 	@echo $(OBJS)

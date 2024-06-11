@@ -26,19 +26,19 @@ SOFTWARE.
 #include <stdarg.h>
 
 __attribute__((format(printf, 3, 4)))
-uint64_t
+uint32_t
 format_to_buffer(char *buffer_in,
-                 uint64_t buffer_len,
+                 uint32_t buffer_len,
                  const char *format,
                  ...);
 
-uint64_t
+uint32_t
 vformat_to_buffer(char *buffer_in,
-                  uint64_t buffer_len,
+                  uint32_t buffer_len,
                   const char *format,
                   va_list list);
 
 __attribute__((format(printf, 1, 2)))
-uint64_t get_length_of_printf_format(const char *fmt, ...);
+uint32_t get_length_of_printf_format(const char *fmt, ...);
 
-uint64_t get_length_of_printf_vformat(const char *fmt, va_list list);
+uint32_t get_length_of_printf_vformat(const char *fmt, va_list list);

@@ -7,13 +7,20 @@
 
 struct string_view {
     const char *begin;
-    uint64_t length;
+    uint32_t length;
 };
 
 struct va_list_struct {
     va_list list;
 };
 
+#define c_string_foreach(c_str, name) \
+    for (typeof(*c_str) *name = c_str; *name != '\0'; name++)
+
+#define check_add(lhs, rhs, result) (!__builtin_add_overflow(lhs, rhs, result))
+#define check_mul(lhs, rhs, result) (!__builtin_mul_overflow(lhs, rhs, result))
+
+#define BINARY_BUFFER_LENGTH 68
 #define OCTAL_BUFFER_LENGTH  26
 #define DECIMAL_BUFFER_LENGTH 22
 #define HEXADECIMAL_BUFFER_LENGTH 20
@@ -22,7 +29,7 @@ struct va_list_struct {
 /******* PRIVATE FUNCTIONS *******/
 
 static inline
-struct string_view sv_create_length(const char *string, const uint64_t length) {
+struct string_view sv_create_length(const char *string, const uint32_t length) {
     const struct string_view sv = {
         .begin = string,
         .length = length
@@ -38,16 +45,14 @@ sv_create_end(const char *const begin, const char *const end) {
 
 #define SV_STATIC(c_str) sv_create_length(c_str, sizeof(c_str) - 1)
 
-static inline struct string_view sv_create_empty() {
-    return (struct string_view){ .begin = NULL, .length = 0 };
-}
+#define SV_EMPTY() (struct string_view){ .begin = NULL, .length = 0 };
 
 static struct string_view sv_drop_front(const struct string_view sv) {
     if (sv.length != 0) {
         return sv_create_length(sv.begin + 1, sv.length - 1);
     }
 
-    return sv_create_empty();
+    return SV_EMPTY();
 }
 
 static const char *const lower_alphadigit_string = "0123456789abcdef";
@@ -60,19 +65,32 @@ enum numeric_base {
     NUMERIC_BASE_16 = 16,
 };
 
+struct num_to_str_options {
+    bool include_prefix : 1;
+    bool include_pos_sign : 1;
+
+    bool capitalize : 1;
+};
+
+#define NUM_TO_STR_OPTIONS_INIT() \
+    ((struct num_to_str_options){ \
+        .include_prefix = false, \
+        .include_pos_sign = false, \
+        .capitalize = false, \
+    })
+
 static inline struct string_view
 unsigned_to_string_view(uint64_t number,
                         const enum numeric_base base,
                         char buffer_in[static const LARGEST_BUFFER_LENGTH],
-                        const bool uppercase,
-                        const bool include_prefix,
-                        const bool add_pos_sign)
+                        const struct num_to_str_options options)
 {
     // Subtract one from the buffer-size to convert ordinal to index.
 
     int i = (LARGEST_BUFFER_LENGTH - 1);
     const char *const alphadigit_string =
-        (uppercase) ? upper_alphadigit_string : lower_alphadigit_string;
+        (options.capitalize) ?
+            upper_alphadigit_string : lower_alphadigit_string;
 
     buffer_in[i] = '\0';
     i--;
@@ -87,7 +105,7 @@ unsigned_to_string_view(uint64_t number,
         number /= base;
     } while (true);
 
-    if (include_prefix) {
+    if (options.include_prefix) {
         buffer_in[i - 2] = '0';
         switch (base) {
             case NUMERIC_BASE_2:
@@ -107,7 +125,7 @@ unsigned_to_string_view(uint64_t number,
         i -= 2;
     }
 
-    if (add_pos_sign) {
+    if (options.include_pos_sign) {
         i -= 1;
         buffer_in[i] = '+';
     }
@@ -121,14 +139,14 @@ static struct string_view
 convert_neg_64int_to_string(int64_t number,
                             const enum numeric_base base,
                             char buffer_in[static const LARGEST_BUFFER_LENGTH],
-                            const bool uppercase,
-                            const bool include_prefix)
+                            const struct num_to_str_options options)
 {
     // Subtract one from the buffer-size to convert ordinal to index.
 
     int i = (LARGEST_BUFFER_LENGTH - 1);
     const char *const alphadigit_string =
-        (uppercase) ? upper_alphadigit_string : lower_alphadigit_string;
+        (options.capitalize) ?
+        upper_alphadigit_string : lower_alphadigit_string;
 
     buffer_in[i] = '\0';
     i--;
@@ -144,7 +162,7 @@ convert_neg_64int_to_string(int64_t number,
         number /= base;
     } while (true);
 
-    if (include_prefix) {
+    if (options.include_prefix) {
         buffer_in[i - 2] = '0';
         switch (base) {
             case NUMERIC_BASE_2:
@@ -176,9 +194,7 @@ static inline struct string_view
 signed_to_string_view(const int64_t number,
                       const enum numeric_base base,
                       char buffer_in[static const LARGEST_BUFFER_LENGTH],
-                      const bool uppercase,
-                      const bool include_prefix,
-                      const bool add_pos_sign)
+                      const struct num_to_str_options options)
 {
     struct string_view result = {};
     if (number > 0) {
@@ -186,16 +202,13 @@ signed_to_string_view(const int64_t number,
             unsigned_to_string_view(number,
                                     base,
                                     buffer_in,
-                                    uppercase,
-                                    include_prefix,
-                                    add_pos_sign);
+                                    options);
     } else {
         result =
             convert_neg_64int_to_string(number,
                                         base,
                                         buffer_in,
-                                        uppercase,
-                                        include_prefix);
+                                        options);
     }
 
     return result;
@@ -228,7 +241,7 @@ parse_flags(struct printf_spec_info *const curr_spec,
         }
 
         iter++;
-        if (*iter == '\0') {
+        if (__builtin_expect(*iter == '\0', 0)) {
             return false;
         }
     } while (true);
@@ -241,21 +254,17 @@ done:
 static inline int
 read_int_from_fmt_string(const char *const c_str, const char **const iter_out) {
     int result = 0;
-    const char *iter = c_str;
-
-    for (char ch = *iter; ch != '\0'; ch = *(++iter)) {
-        const uint8_t digit = ch - '0';
+    c_string_foreach(c_str, iter) {
+        const uint8_t digit = *iter - '0';
         if (digit >= 10) {
             *iter_out = iter;
             break;
         }
 
-        if (__builtin_mul_overflow(result, 10, &result)) {
-            *iter_out = iter;
-            return -1;
-        }
-
-        if (__builtin_add_overflow(result, digit, &result)) {
+        if (__builtin_expect(
+                !check_mul(result, 10, &result)
+                || !check_add(result, digit, &result), 0))
+        {
             *iter_out = iter;
             return -1;
         }
@@ -272,7 +281,7 @@ parse_width(struct printf_spec_info *const curr_spec,
 {
     if (*iter != '*') {
         const int width = read_int_from_fmt_string(iter, &iter);
-        if (width == -1) {
+        if (__builtin_expect(width == -1, 0)) {
             return false;
         }
 
@@ -284,10 +293,8 @@ parse_width(struct printf_spec_info *const curr_spec,
         iter++;
     }
 
-    if (*iter == '\0') {
-        // If we have an incomplete spec, then we exit without writing
-        // anything.
-
+    if (__builtin_expect(*iter == '\0', 0)) {
+        // If we have an incomplete spec, then we exit without writing anything.
         return false;
     }
 
@@ -301,8 +308,8 @@ parse_precision(struct printf_spec_info *const curr_spec,
                 struct va_list_struct *const list_struct,
                 const char **const iter_out)
 {
-    curr_spec->precision = -1;
     if (*iter != '.') {
+        curr_spec->precision = -1;
         return true;
     }
 
@@ -312,7 +319,7 @@ parse_precision(struct printf_spec_info *const curr_spec,
             return false;
         case '*':
             // Don't bother reading if we have an incomplete spec
-            if (iter[1] == '\0') {
+            if (__builtin_expect(iter[1] == '\0', 0)) {
                 return false;
             }
 
@@ -320,18 +327,17 @@ parse_precision(struct printf_spec_info *const curr_spec,
             iter++;
 
             break;
-        default: {
+        default:
             curr_spec->precision = read_int_from_fmt_string(iter, &iter);
-            if (curr_spec->precision == -1) {
+            if (__builtin_expect(curr_spec->precision == -1, 0)) {
                 return false;
             }
 
-            if (*iter == '\0') {
+            if (__builtin_expect(*iter == '\0', 0)) {
                 return false;
             }
 
             break;
-        }
     }
 
     *iter_out = iter;
@@ -348,35 +354,39 @@ parse_length(struct printf_spec_info *const curr_spec,
 {
     switch (*iter) {
         case '\0':
-            // If we have an incomplete spec, then we exit without writing
+            // If we get an incomplete spec, then we exit without writing
             // anything.
             return false;
         case 'h': {
             iter++;
             switch (*iter) {
                 case '\0':
-                    // If we have an incomplete spec, then we exit without
+                    // If we get an incomplete spec, then we exit without
                     // writing anything.
                     return false;
                 case 'h': {
                     const uint64_t number =
-                        (uint64_t)(signed char)va_arg(list_struct->list, int);
+                        (uint64_t)va_arg(list_struct->list, int);
 
                     *number_out = number;
                     *is_zero_out = number == 0;
 
-                    curr_spec->length_info = iter - 1;
+                    curr_spec->length_info = iter - 2;
+                    curr_spec->length_info_len = 2;
+
                     iter++;
                     break;
                 }
                 default: {
                     const uint64_t number =
-                        (uint64_t)(short int)va_arg(list_struct->list, int);
+                        (uint64_t)va_arg(list_struct->list, int);
 
                     *number_out = number;
                     *is_zero_out = number == 0;
 
                     curr_spec->length_info = iter - 1;
+                    curr_spec->length_info_len = 1;
+
                     break;
                 }
             }
@@ -395,9 +405,10 @@ parse_length(struct printf_spec_info *const curr_spec,
                     *number_out = number;
                     *is_zero_out = number == 0;
 
-                    curr_spec->length_info = iter - 1;
-                    iter++;
+                    curr_spec->length_info = iter - 2;
+                    curr_spec->length_info_len = 2;
 
+                    iter++;
                     break;
                 }
                 default: {
@@ -408,6 +419,8 @@ parse_length(struct printf_spec_info *const curr_spec,
                     *is_zero_out = number == 0;
 
                     curr_spec->length_info = iter - 1;
+                    curr_spec->length_info_len = 1;
+
                     break;
                 }
             }
@@ -421,8 +434,9 @@ parse_length(struct printf_spec_info *const curr_spec,
             *is_zero_out = number == 0;
 
             curr_spec->length_info = iter;
-            iter++;
+            curr_spec->length_info_len = 1;
 
+            iter++;
             break;
         }
         case 'z': {
@@ -432,8 +446,9 @@ parse_length(struct printf_spec_info *const curr_spec,
             *is_zero_out = number == 0;
 
             curr_spec->length_info = iter;
-            iter++;
+            curr_spec->length_info_len = 1;
 
+            iter++;
             break;
         }
         case 't': {
@@ -444,12 +459,15 @@ parse_length(struct printf_spec_info *const curr_spec,
             *is_zero_out = number == 0;
 
             curr_spec->length_info = iter;
-            iter++;
+            curr_spec->length_info_len = 1;
 
+            iter++;
             break;
         }
         default:
             curr_spec->length_info = NULL;
+            curr_spec->length_info_len = 0;
+
             return true;
     }
 
@@ -468,7 +486,7 @@ handle_spec(struct printf_spec_info *const curr_spec,
             char *const buffer,
             uint64_t number,
             struct va_list_struct *const list_struct,
-            const uint64_t written_out,
+            const uint32_t written_out,
             struct string_view *const parsed_out,
             bool *const is_zero_out,
             bool *const is_null_out)
@@ -476,9 +494,35 @@ handle_spec(struct printf_spec_info *const curr_spec,
     switch (curr_spec->spec) {
         case '\0':
             return E_HANDLE_SPEC_REACHED_END;
+        case 'b':
+            if (curr_spec->length_info_len == 0) {
+                number = (uint64_t)va_arg(list_struct->list, unsigned);
+                *is_zero_out = number == 0;
+            }
+
+            *parsed_out =
+                unsigned_to_string_view(number,
+                                        NUMERIC_BASE_2,
+                                        buffer,
+                                        NUM_TO_STR_OPTIONS_INIT());
+            break;
+        case 'B':
+            if (curr_spec->length_info_len == 0) {
+                number = (uint64_t)va_arg(list_struct->list, unsigned);
+                *is_zero_out = number == 0;
+            }
+
+            *parsed_out =
+                unsigned_to_string_view(number,
+                                        NUMERIC_BASE_2,
+                                        buffer,
+                                        (struct num_to_str_options){
+                                          .capitalize = true
+                                        });
+            break;
         case 'd':
         case 'i':
-            if (curr_spec->length_info == NULL) {
+            if (curr_spec->length_info_len == 0) {
                 number = (uint64_t)va_arg(list_struct->list, int);
                 *is_zero_out = number == 0;
             }
@@ -487,12 +531,13 @@ handle_spec(struct printf_spec_info *const curr_spec,
                 signed_to_string_view((int64_t)number,
                                       NUMERIC_BASE_10,
                                       buffer,
-                                      /*uppercase=*/false,
-                                      /*include_prefix=*/false,
-                                      curr_spec->add_pos_sign);
+                                      (struct num_to_str_options){
+                                        .include_pos_sign =
+                                            curr_spec->add_pos_sign,
+                                      });
             break;
         case 'u':
-            if (curr_spec->length_info == NULL) {
+            if (curr_spec->length_info_len == 0) {
                 number = va_arg(list_struct->list, unsigned);
                 *is_zero_out = number == 0;
             }
@@ -501,26 +546,22 @@ handle_spec(struct printf_spec_info *const curr_spec,
                 unsigned_to_string_view(number,
                                         NUMERIC_BASE_10,
                                         buffer,
-                                        /*uppercase=*/false,
-                                        /*include_prefix=*/false,
-                                        /*add_pos_sign=*/false);
+                                        NUM_TO_STR_OPTIONS_INIT());
             break;
         case 'o':
-            if (curr_spec->length_info == NULL) {
+            if (curr_spec->length_info_len == 0) {
                 number = va_arg(list_struct->list, unsigned);
-                *is_zero_out = (number == 0);
+                *is_zero_out = number == 0;
             }
 
             *parsed_out =
                 unsigned_to_string_view(number,
                                         NUMERIC_BASE_8,
                                         buffer,
-                                        /*uppercase=*/false,
-                                        /*include_prefix=*/false,
-                                        /*add_pos_sign=*/false);
+                                        NUM_TO_STR_OPTIONS_INIT());
             break;
         case 'x':
-            if (curr_spec->length_info == NULL) {
+            if (curr_spec->length_info_len == 0) {
                 number = va_arg(list_struct->list, unsigned);
                 *is_zero_out = number == 0;
             }
@@ -529,12 +570,10 @@ handle_spec(struct printf_spec_info *const curr_spec,
                 unsigned_to_string_view(number,
                                         NUMERIC_BASE_16,
                                         buffer,
-                                        /*uppercase=*/false,
-                                        /*include_prefix=*/false,
-                                        /*add_pos_sign=*/false);
+                                        NUM_TO_STR_OPTIONS_INIT());
             break;
-        case 'X': {
-            if (curr_spec->length_info == NULL) {
+        case 'X':
+            if (curr_spec->length_info_len == 0) {
                 number = va_arg(list_struct->list, unsigned);
                 *is_zero_out = number == 0;
             }
@@ -543,11 +582,10 @@ handle_spec(struct printf_spec_info *const curr_spec,
                 unsigned_to_string_view(number,
                                         NUMERIC_BASE_16,
                                         buffer,
-                                        /*uppercase=*/true,
-                                        /*include_prefix=*/false,
-                                        /*add_pos_sign=*/false);
+                                        (struct num_to_str_options){
+                                            .capitalize = true
+                                        });
             break;
-        }
         case 'c':
             buffer[0] = (char)va_arg(list_struct->list, int);
             *parsed_out = sv_create_length(buffer, 1);
@@ -556,7 +594,7 @@ handle_spec(struct printf_spec_info *const curr_spec,
         case 's': {
             const char *const str = va_arg(list_struct->list, const char *);
             if (str != NULL) {
-                uint64_t length = 0;
+                uint32_t length = 0;
                 if (curr_spec->precision != -1) {
                     length = strnlen(str, (size_t)curr_spec->precision);
                 } else {
@@ -574,13 +612,16 @@ handle_spec(struct printf_spec_info *const curr_spec,
         case 'p': {
             const void *const arg = va_arg(list_struct->list, const void *);
             if (arg != NULL) {
+                const struct num_to_str_options options = {
+                    .capitalize = true,
+                    .include_prefix = true
+                };
+
                 *parsed_out =
                     unsigned_to_string_view((uint64_t)arg,
                                             NUMERIC_BASE_16,
                                             buffer,
-                                            /*uppercase=*/true,
-                                            /*include_prefix=*/true,
-                                            /*add_pos_sign=*/false);
+                                            options);
             } else {
                 *parsed_out = SV_STATIC("(nil)");
                 *is_null_out = true;
@@ -589,19 +630,21 @@ handle_spec(struct printf_spec_info *const curr_spec,
             break;
         }
         case 'n':
-            if (curr_spec->length_info == NULL) {
-                *va_arg(list_struct->list, int *) = written_out;
+            if (curr_spec->length_info_len == 0) {
+                *va_arg(list_struct->list, int *) = (int)written_out;
                 return E_HANDLE_SPEC_CONTINUE;
             }
 
             switch (*curr_spec->length_info) {
                 case 'h':
                     // case 'hh'
-                    if (curr_spec->length_info[1] == 'h') {
-                        *va_arg(list_struct->list, signed char *) =
-                            written_out;
-                        return E_HANDLE_SPEC_CONTINUE;
-                    } else {
+                    if (curr_spec->length_info_len == 2) {
+                        if (curr_spec->length_info[1] == 'h') {
+                            *va_arg(list_struct->list, signed char *) =
+                                written_out;
+                            return E_HANDLE_SPEC_CONTINUE;
+                        }
+                    } else if (curr_spec->length_info_len == 1) {
                         *va_arg(list_struct->list, short int *) = written_out;
                         return E_HANDLE_SPEC_CONTINUE;
                     }
@@ -609,12 +652,14 @@ handle_spec(struct printf_spec_info *const curr_spec,
                     break;
                 case 'l':
                     // case 'll'
-                    if (curr_spec->length_info[1] == 'l') {
-                        *va_arg(list_struct->list, signed char *) =
-                            written_out;
+                    if (curr_spec->length_info_len == 2) {
+                        if (curr_spec->length_info[1] == 'l') {
+                            *va_arg(list_struct->list, signed char *) =
+                                written_out;
 
-                        return E_HANDLE_SPEC_CONTINUE;
-                    } else {
+                            return E_HANDLE_SPEC_CONTINUE;
+                        }
+                    } else if (curr_spec->length_info_len == 1) {
                         *va_arg(list_struct->list, long int *) =
                             (long int)written_out;
 
@@ -650,6 +695,8 @@ handle_spec(struct printf_spec_info *const curr_spec,
 
 static inline bool is_int_specifier(const char spec) {
     switch (spec) {
+        case 'b':
+        case 'B':
         case 'd':
         case 'i':
         case 'o':
@@ -662,7 +709,7 @@ static inline bool is_int_specifier(const char spec) {
     return false;
 }
 
-static inline uint64_t
+static inline uint32_t
 write_prefix_for_spec(struct printf_spec_info *const info,
                       const printf_write_char_callback_t write_ch_cb,
                       void *const ch_cb_info,
@@ -670,12 +717,18 @@ write_prefix_for_spec(struct printf_spec_info *const info,
                       void *const sv_cb_info,
                       bool *const cont_out)
 {
-    uint64_t out = 0;
+    uint32_t out = 0;
     if (!info->add_base_prefix) {
         return out;
     }
 
     switch (info->spec) {
+        case 'b':
+            out += write_sv_cb(info, sv_cb_info, "0b", /*length=*/2, cont_out);
+            break;
+        case 'B':
+            out += write_sv_cb(info, sv_cb_info, "0B", /*length=*/2, cont_out);
+            break;
         case 'o':
             out += write_ch_cb(info, ch_cb_info, '0', /*times=*/1, cont_out);
             break;
@@ -690,10 +743,10 @@ write_prefix_for_spec(struct printf_spec_info *const info,
     return out;
 }
 
-static uint64_t
+static uint32_t
 pad_with_lead_zeros(struct printf_spec_info *const info,
                     struct string_view *const parsed,
-                    const uint64_t zero_count,
+                    const uint32_t zero_count,
                     const bool is_null,
                     const printf_write_char_callback_t write_char_cb,
                     void *const cb_info,
@@ -701,7 +754,7 @@ pad_with_lead_zeros(struct printf_spec_info *const info,
                     void *const write_sv_cb_info,
                     bool *const cont_out)
 {
-    uint64_t out = 0;
+    uint32_t out = 0;
     if (!is_null) {
         out +=
             write_prefix_for_spec(info,
@@ -718,9 +771,6 @@ pad_with_lead_zeros(struct printf_spec_info *const info,
 
     const char front = *parsed->begin;
     if (front == '+') {
-        // Avoid an extra check as only have a positive sign when the spec
-        // requested one.
-
         out += write_char_cb(info, cb_info, '+', /*amount=*/1, cont_out);
         if (!cont_out) {
             return out;
@@ -744,35 +794,28 @@ pad_with_lead_zeros(struct printf_spec_info *const info,
     return out;
 }
 
-static inline uintptr_t
-call_cb(const struct printf_spec_info *const spec_info,
+static inline uint32_t
+call_cb(struct printf_spec_info *const info,
         const struct string_view sv,
-        const printf_write_char_callback_t char_cb,
+        const printf_write_char_callback_t write_char_cb,
         void *const char_cb_info,
-        const printf_write_string_callback_t string_cb,
+        const printf_write_string_callback_t write_sv_cb,
         void *const sv_cb_info,
-        bool *const should_cont_in)
+        bool *const cont_out)
 {
     if (sv.length == 0) {
-        return 0;
     }
 
-    if (sv.length != 1) {
-        const uintptr_t result =
-            string_cb(spec_info,
-                      sv_cb_info,
-                      sv.begin,
-                      sv.length,
-                      should_cont_in);
-        return result;
+    if (sv.length == 1) {
+        const char ch = *sv.begin;
+        return write_char_cb(info, char_cb_info, ch, /*amount=*/1, cont_out);
     }
 
-    return char_cb(spec_info, char_cb_info, sv.begin[0], 1, should_cont_in);
+    return write_sv_cb(info, sv_cb_info, sv.begin, sv.length, cont_out);
 }
-
 /******* PUBLIC FUNCTIONS *******/
 
-uint64_t
+uint32_t
 parse_printf_format(const printf_write_char_callback_t write_char_cb,
                     void *const write_char_cb_info,
                     const printf_write_string_callback_t write_string_cb,
@@ -780,16 +823,17 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
                     const char *const fmt,
                     va_list list)
 {
-    struct va_list_struct list_struct = {};
+    struct va_list_struct list_struct = {0};
     va_copy(list_struct.list, list);
 
     // Add 2 for a int-prefix, and one for a sign.
-    char buffer[LARGEST_BUFFER_LENGTH] = {};
+    char buffer[BINARY_BUFFER_LENGTH + 3];
+    bzero(buffer, sizeof(buffer));
 
-    struct printf_spec_info curr_spec = {};
+    struct printf_spec_info curr_spec = PRINTF_SPEC_INFO_INIT();
     const char *unformatted_start = fmt;
 
-    uint64_t written_out = 0;
+    uint32_t written_out = 0;
     bool should_continue = true;
 
     const char *iter = strchr(fmt, '%');
@@ -818,7 +862,6 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
         }
 
         // Format is %[flags][width][.precision][length]specifier
-        curr_spec = (struct printf_spec_info){};
         if (!parse_flags(&curr_spec, iter, &iter)) {
             // If we have an incomplete spec, then we exit without writing
             // anything.
@@ -840,7 +883,6 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
             return written_out;
         }
 
-        // Parse length
         uint64_t number = 0;
         bool is_zero = false;
 
@@ -853,11 +895,12 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
         {
             // If we have an incomplete spec, then we exit without writing
             // anything.
+            va_end(list_struct.list);
             return written_out;
         }
 
         // Parse specifier
-        struct string_view parsed = {};
+        struct string_view parsed = SV_EMPTY();
         bool is_null = false;
 
         curr_spec.spec = *iter;
@@ -880,10 +923,11 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
                 va_end(list_struct.list);
                 return written_out;
             case E_HANDLE_SPEC_CONTINUE:
+                curr_spec = PRINTF_SPEC_INFO_INIT();
                 continue;
         }
 
-        /* Move past specifier */
+        // Move past specifier
         iter++;
 
         uint32_t padded_zero_count = 0;
@@ -893,22 +937,28 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
         // We don't write anything if we have a '0' and precision is 0.
 
         const bool should_write_parsed = !(is_zero && curr_spec.precision == 0);
-        if (!should_write_parsed) {
-            parsed_length = 0;
-        } else if (curr_spec.add_base_prefix) {
-            switch (curr_spec.spec) {
-                case 'o':
-                    parsed_length += 1;
-                    break;
-                case 'x':
-                case 'X':
-                    parsed_length += 2;
-                    break;
+        if (should_write_parsed) {
+            if (curr_spec.add_base_prefix) {
+                switch (curr_spec.spec) {
+                    case 'b':
+                    case 'B':
+                        parsed_length += 2;
+                        break;
+                    case 'o':
+                        parsed_length += 1;
+                        break;
+                    case 'x':
+                    case 'X':
+                        parsed_length += 2;
+                        break;
+                }
             }
+        } else {
+            parsed_length = 0;
         }
 
-        // If we're not wider than the specified width, we have to pad with
-        // either spaces or zeroes.
+        // We have to pad with either spaces or zeroes if we're not wider than
+        // the specified width,
 
         uint32_t space_pad_count = 0;
         if (is_int_specifier(curr_spec.spec)) {
@@ -939,10 +989,10 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
 
         if (parsed_length < curr_spec.width) {
             const bool pad_with_zeros =
-                curr_spec.leftpad_zeros &&
-                is_int_specifier(curr_spec.spec) &&
-                curr_spec.precision == -1 &&
-                !curr_spec.left_justify; // Never left-justify padded zeros
+                curr_spec.leftpad_zeros
+                && is_int_specifier(curr_spec.spec)
+                && curr_spec.precision == -1
+                && !curr_spec.left_justify; // Zeros are never left-justified
 
             if (pad_with_zeros) {
                 // We're always resetting padded_zero_count if it was set before
@@ -1045,13 +1095,14 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
                 }
             }
         }
+
+        curr_spec = PRINTF_SPEC_INFO_INIT();
     }
 
     if (*unformatted_start != '\0') {
         const struct string_view unformatted =
             sv_create_length(unformatted_start, strlen(unformatted_start));
 
-        curr_spec = (struct printf_spec_info){};
         written_out +=
             call_cb(NULL,
                     unformatted,

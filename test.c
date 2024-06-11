@@ -195,4 +195,6 @@ int main(const int argc, const char *const argv[]) {
 
     const char buffer2[] = "Hello, There";
     test_format_to_buffer(sizeof(buffer), "Hel", "%.*s", 3, buffer2);
+
+    printf("All tests passed!\n");
 }

@@ -25,7 +25,6 @@ SOFTWARE.
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <string.h>
 
 struct printf_spec_info {
     bool add_one_space_for_sign : 1;
@@ -34,12 +33,26 @@ struct printf_spec_info {
     bool add_base_prefix : 1;
     bool leftpad_zeros : 1;
 
+    char spec;
     uint32_t width;
     int precision; // -1 if no precision was provided
 
+    uint8_t length_info_len;
     const char *length_info;
-    char spec;
 };
+
+#define PRINTF_SPEC_INFO_INIT() \
+    ((struct printf_spec_info) { \
+        .add_one_space_for_sign = false, \
+        .left_justify = false, \
+        .add_pos_sign = false, \
+        .leftpad_zeros = false, \
+        .spec = '\0', \
+        .width = 0, \
+        .precision = 0, \
+        .length_info_len = 0, \
+        .length_info = "" \
+    })
 
 /*
  * All callbacks should return length written-out.
@@ -48,24 +61,24 @@ struct printf_spec_info {
  * spec_info is NULL for callbacks to write unformatted strings.
  */
 
-typedef uint64_t
-(*printf_write_char_callback_t)(const struct printf_spec_info *spec_info,
+typedef uint32_t
+(*printf_write_char_callback_t)(struct printf_spec_info *spec_info,
                                 void *info,
                                 char ch,
-                                uint64_t times,
+                                uint32_t times,
                                 bool *should_continue_out);
 
-typedef uint64_t
-(*printf_write_string_callback_t)(const struct printf_spec_info *spec_info,
+typedef uint32_t
+(*printf_write_string_callback_t)(struct printf_spec_info *spec_info,
                                   void *info,
                                   const char *string,
-                                  uint64_t length,
+                                  uint32_t length,
                                   bool *should_continue_out);
 
-uint64_t
-parse_printf_format(printf_write_char_callback_t char_cb,
+uint32_t
+parse_printf_format(printf_write_char_callback_t write_char_cb,
                     void *char_cb_info,
-                    printf_write_string_callback_t string_cb,
-                    void *string_cb_info,
-                    const char *c_str,
+                    printf_write_string_callback_t write_string_cb,
+                    void *sv_cb_info,
+                    const char *fmt,
                     va_list list);
