@@ -20,11 +20,12 @@ struct va_list_struct {
 #define check_add(lhs, rhs, result) (!__builtin_add_overflow(lhs, rhs, result))
 #define check_mul(lhs, rhs, result) (!__builtin_mul_overflow(lhs, rhs, result))
 
+// Add 2 for a int-prefix, and one for a sign, to each length
 #define BINARY_BUFFER_LENGTH 68
 #define OCTAL_BUFFER_LENGTH  26
 #define DECIMAL_BUFFER_LENGTH 22
 #define HEXADECIMAL_BUFFER_LENGTH 20
-#define LARGEST_BUFFER_LENGTH OCTAL_BUFFER_LENGTH
+#define LARGEST_BUFFER_LENGTH BINARY_BUFFER_LENGTH
 
 /******* PRIVATE FUNCTIONS *******/
 
@@ -826,8 +827,7 @@ parse_printf_format(const printf_write_char_callback_t write_char_cb,
     struct va_list_struct list_struct = {0};
     va_copy(list_struct.list, list);
 
-    // Add 2 for a int-prefix, and one for a sign.
-    char buffer[BINARY_BUFFER_LENGTH + 3];
+    char buffer[LARGEST_BUFFER_LENGTH];
     bzero(buffer, sizeof(buffer));
 
     struct printf_spec_info curr_spec = PRINTF_SPEC_INFO_INIT();

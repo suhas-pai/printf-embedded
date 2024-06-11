@@ -22,6 +22,7 @@ $(TARGET): $(OBJS)
 clean:
 	@find . -name '*.o' -type f -delete
 	@$(RM) $(TARGET)
+	@$(RM) $(DEBUG_TARGET)
 
 debug_clean:
 	@find . -name '*.d.o' -type f -delete

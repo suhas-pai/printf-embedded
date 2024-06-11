@@ -89,11 +89,19 @@ int main(const int argc, const char *const argv[]) {
         assert(strlen(buffer) == 1);
     }
     {
+        format_to_buffer(buffer, sizeof(buffer), "%b", 890134);
+        assert(strcmp(buffer, "11011001010100010110") == 0);
+    }
+    {
         format_to_buffer(buffer, sizeof(buffer), "%d", 890134);
         assert(strcmp(buffer, "890134") == 0);
     }
     {
         format_to_buffer(buffer, sizeof(buffer), "%3d", 1);
+        assert(strcmp(buffer, "  1") == 0);
+    }
+    {
+        format_to_buffer(buffer, sizeof(buffer), "%3b", 1);
         assert(strcmp(buffer, "  1") == 0);
     }
     {
@@ -103,6 +111,14 @@ int main(const int argc, const char *const argv[]) {
     {
         format_to_buffer(buffer, sizeof(buffer), "%03d", -1);
         assert(strcmp(buffer, "-01") == 0);
+    }
+    {
+        format_to_buffer(buffer, sizeof(buffer), "%03b", 1);
+        assert(strcmp(buffer, "001") == 0);
+    }
+    {
+        format_to_buffer(buffer, sizeof(buffer), "%03b", -1);
+        assert(strcmp(buffer, "11111111111111111111111111111111") == 0);
     }
     {
         format_to_buffer(buffer, sizeof(buffer), "%3d", -1);
