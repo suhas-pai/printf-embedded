@@ -197,7 +197,7 @@ signed_to_string_view(const int64_t number,
                       const struct num_to_str_options options)
 {
     struct string_view result = {};
-    if (number > 0) {
+    if (number >= 0) {
         result = unsigned_to_string_view(number, base, buffer_in, options);
     } else {
         result = convert_neg_64int_to_string(number, base, buffer_in, options);

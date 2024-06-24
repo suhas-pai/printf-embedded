@@ -93,8 +93,16 @@ int main(const int argc, const char *const argv[]) {
         assert(strcmp(buffer, "11011001010100010110") == 0);
     }
     {
+        format_to_buffer(buffer, sizeof(buffer), "%d", 0);
+        assert(strcmp(buffer, "0") == 0);
+    }
+    {
         format_to_buffer(buffer, sizeof(buffer), "%d", 890134);
         assert(strcmp(buffer, "890134") == 0);
+    }
+    {
+        format_to_buffer(buffer, sizeof(buffer), "%3d", 0);
+        assert(strcmp(buffer, "  0") == 0);
     }
     {
         format_to_buffer(buffer, sizeof(buffer), "%3d", 1);
