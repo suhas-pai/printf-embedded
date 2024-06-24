@@ -29,8 +29,8 @@ struct va_list_struct {
 
 /******* PRIVATE FUNCTIONS *******/
 
-static inline
-struct string_view sv_create_length(const char *string, const uint32_t length) {
+static inline struct string_view
+sv_create_length(const char *const string, const uint32_t length) {
     const struct string_view sv = {
         .begin = string,
         .length = length
@@ -45,7 +45,6 @@ sv_create_end(const char *const begin, const char *const end) {
 }
 
 #define SV_STATIC(c_str) sv_create_length(c_str, sizeof(c_str) - 1)
-
 #define SV_EMPTY() (struct string_view){ .begin = NULL, .length = 0 };
 
 static struct string_view sv_drop_front(const struct string_view sv) {
@@ -88,7 +87,7 @@ unsigned_to_string_view(uint64_t number,
 {
     // Subtract one from the buffer-size to convert ordinal to index.
 
-    int i = (LARGEST_BUFFER_LENGTH - 1);
+    int i = LARGEST_BUFFER_LENGTH - 1;
     const char *const alphadigit_string =
         (options.capitalize) ?
             upper_alphadigit_string : lower_alphadigit_string;
@@ -144,7 +143,7 @@ convert_neg_64int_to_string(int64_t number,
 {
     // Subtract one from the buffer-size to convert ordinal to index.
 
-    int i = (LARGEST_BUFFER_LENGTH - 1);
+    int i = LARGEST_BUFFER_LENGTH - 1;
     const char *const alphadigit_string =
         (options.capitalize) ?
         upper_alphadigit_string : lower_alphadigit_string;
@@ -199,17 +198,9 @@ signed_to_string_view(const int64_t number,
 {
     struct string_view result = {};
     if (number > 0) {
-        result =
-            unsigned_to_string_view(number,
-                                    base,
-                                    buffer_in,
-                                    options);
+        result = unsigned_to_string_view(number, base, buffer_in, options);
     } else {
-        result =
-            convert_neg_64int_to_string(number,
-                                        base,
-                                        buffer_in,
-                                        options);
+        result = convert_neg_64int_to_string(number, base, buffer_in, options);
     }
 
     return result;

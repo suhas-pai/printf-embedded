@@ -5,7 +5,7 @@ OBJS=$(SRCS:.c=.o)
 DEBUG_OBJS=$(SRCS:.c=.d.o)
 
 CFLAGS=-Iinclude/ -Wall -Wextra
-DEBUG_CFLAGS=$(CFLAGS) -g3
+DEBUG_CFLAGS=$(CFLAGS) -g3 -fsanitize=undefined -fsanitize=address
 RELEASE_CFLAGS=$(CFLAGS) -Ofast
 
 TARGET=test
@@ -32,7 +32,7 @@ debug: $(DEBUG_TARGET)
 
 $(DEBUG_TARGET): $(DEBUG_OBJS)
 	@mkdir -p $(dir $(DEBUG_TARGET))
-	@$(CC) $^ -o $@
+	@$(CC) $(LDFLAGS) $^ -o $@
 
 %.o: %.c
 	@mkdir -p $(shell dirname $@)
@@ -43,7 +43,7 @@ $(DEBUG_TARGET): $(DEBUG_OBJS)
 	@$(CC) $(DEBUG_CFLAGS) -c $< -o $@
 
 compile_commands: clean
-	compiledb make
+	@compiledb make
 
 print_info:
 	@echo $(OBJS)
